@@ -16,6 +16,10 @@ jobs:
       - name: Release prüfen
         env:
           PYTHONDONTWRITEBYTECODE: "1"
+          LANAXY_ETC_DIR: ${{ runner.temp }}/lanaxy/etc
+          LANAXY_DATA_DIR: ${{ runner.temp }}/lanaxy/data
+          LANAXY_LOG_DIR: ${{ runner.temp }}/lanaxy/log
+          LANAXY_CONFIG: ${{ runner.temp }}/lanaxy/etc/config.yaml
           LANAXY_WEB_HOST: 127.0.0.1
           LANAXY_WEB_PORT: "8090"
         run: |
