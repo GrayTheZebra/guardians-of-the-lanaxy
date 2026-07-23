@@ -67,7 +67,14 @@ from launchpad import (
 )
 from web.security import enabled as auth_enabled, valid as auth_valid, csrf_token, verify_csrf, limited, failed, clear, verify
 from i18n import SUPPORTED_LANGUAGES, localize_plugin, resolve_language, translate
-LANAXY_ETC_DIR = Path(os.environ.get("LANAXY_ETC_DIR", "/etc/lanaxy"))
+
+# Runtime paths may be redirected for CI, containers or custom deployments.
+# When LANAXY_ETC_DIR is omitted, keep the web secret next to the selected
+# config file. Production therefore still defaults to /etc/lanaxy.
+LANAXY_CONFIG_PATH = Path(os.environ.get("LANAXY_CONFIG", DEFAULT_CONFIG_PATH))
+LANAXY_ETC_DIR = Path(
+    os.environ.get("LANAXY_ETC_DIR") or LANAXY_CONFIG_PATH.parent
+)
 LANAXY_DATA_DIR = Path(os.environ.get("LANAXY_DATA_DIR", "/var/lib/lanaxy"))
 LANAXY_LOG_DIR = Path(os.environ.get("LANAXY_LOG_DIR", "/var/log/lanaxy"))
 
