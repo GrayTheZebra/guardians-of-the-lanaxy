@@ -2,7 +2,8 @@ name: Test LANaxy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -12,34 +13,99 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
       - name: Abhängigkeiten installieren
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3-yaml python3-paho-mqtt python3-requests python3-flask python3-gunicorn
+          sudo apt-get install -y \
+            python3-yaml \
+            python3-paho-mqtt \
+            python3-requests \
+            python3-flask \
+            python3-gunicorn
+
       - name: Shell-Skripte prüfen
         run: |
           bash -n bootstrap.sh
           bash -n deploy/lanaxy.de/install.sh
           bash -n scripts/deploy-public-installer.sh
-          cmp -s bootstrap.sh deploy/lanaxy.de/install.sh
           bash -n install.sh
           bash -n update.sh
           bash -n miniguard_install.sh
           bash -n scripts/setup-lanlord.sh
+
+          cmp -s bootstrap.sh deploy/lanaxy.de/install.sh
+
       - name: Python kompilieren
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 -B -m compileall -q .
+        run: |
+          python3 -B -m compileall -q .
+
       - name: WSGI-Konfiguration prüfen
         env:
           PYTHONDONTWRITEBYTECODE: "1"
+          LANAXY_ETC_DIR: ${{ runner.temp }}/lanaxy/etc
+          LANAXY_DATA_DIR: ${{ runner.temp }}/lanaxy/data
+          LANAXY_LOG_DIR: ${{ runner.temp }}/lanaxy/log
+          LANAXY_CONFIG: ${{ runner.temp }}/lanaxy/etc/config.yaml
           LANAXY_WEB_HOST: 127.0.0.1
           LANAXY_WEB_PORT: "8090"
         run: |
-          python3 -B -c "from web.run import app; assert app is not None"
-          python3 -B -m gunicorn --check-config --config web/gunicorn.conf.py web.run:app
+          mkdir -p \
+            "$LANAXY_ETC_DIR/backups" \
+            "$LANAXY_ETC_DIR/guardians.d" \
+            "$LANAXY_ETC_DIR/beacons.d" \
+            "$LANAXY_ETC_DIR/portals.d" \
+            "$LANAXY_DATA_DIR/guardian-state/smart" \
+            "$LANAXY_DATA_DIR/import-previews" \
+            "$LANAXY_LOG_DIR"
+
+          cp examples/config.yaml "$LANAXY_CONFIG"
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          config_path = Path(os.environ["LANAXY_CONFIG"])
+          config = yaml.safe_load(
+              config_path.read_text(encoding="utf-8")
+          ) or {}
+
+          lanaxy = config.setdefault("lanaxy", {})
+
+          lanaxy["database_file"] = str(
+              Path(os.environ["LANAXY_DATA_DIR"]) / "lanaxy.db"
+          )
+          lanaxy["state_file"] = str(
+              Path(os.environ["LANAXY_DATA_DIR"]) / "state.json"
+          )
+          lanaxy["log_file"] = str(
+              Path(os.environ["LANAXY_LOG_DIR"]) / "lanaxy.log"
+          )
+
+          config_path.write_text(
+              yaml.safe_dump(config, sort_keys=False),
+              encoding="utf-8",
+          )
+          PY
+
+          test -f "$LANAXY_CONFIG"
+          test -r "$LANAXY_CONFIG"
+
+          python3 -B -c \
+            "from web.run import app; assert app is not None"
+
+          python3 -B -m gunicorn \
+            --check-config \
+            --config web/gunicorn.conf.py \
+            web.run:app
+
       - name: Pflichtdateien prüfen
         run: |
           test -f LICENSE
