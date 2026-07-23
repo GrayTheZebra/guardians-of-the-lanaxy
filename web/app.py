@@ -67,6 +67,10 @@ from launchpad import (
 )
 from web.security import enabled as auth_enabled, valid as auth_valid, csrf_token, verify_csrf, limited, failed, clear, verify
 from i18n import SUPPORTED_LANGUAGES, localize_plugin, resolve_language, translate
+LANAXY_ETC_DIR = Path(os.environ.get("LANAXY_ETC_DIR", "/etc/lanaxy"))
+LANAXY_DATA_DIR = Path(os.environ.get("LANAXY_DATA_DIR", "/var/lib/lanaxy"))
+LANAXY_LOG_DIR = Path(os.environ.get("LANAXY_LOG_DIR", "/var/log/lanaxy"))
+
 from miniguard_manager import (
     ALL_ACTIONS as MINIGUARD_ACTIONS,
     DEFAULT_ACTION_PERMISSIONS as MINIGUARD_DEFAULT_ACTION_PERMISSIONS,
@@ -184,7 +188,7 @@ def _guardian_form_values(form, schema: dict, base: dict | None = None) -> dict:
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    secret_path = Path("/etc/lanaxy/web-secret")
+    secret_path = LANAXY_ETC_DIR / "web-secret"
     if not secret_path.exists():
         secret_path.parent.mkdir(parents=True, exist_ok=True)
         secret_path.write_text(__import__("secrets").token_urlsafe(48), encoding="utf-8")
@@ -226,14 +230,14 @@ def create_app() -> Flask:
         return response
 
     config_path = DEFAULT_CONFIG_PATH
-    backup_dir = "/etc/lanaxy/backups"
-    state_path = Path("/var/lib/lanaxy/state.json")
+    backup_dir = str(LANAXY_ETC_DIR / "backups")
+    state_path = LANAXY_DATA_DIR / "state.json"
     service = ConfigService(config_path, backup_dir)
     initial_config = service.load()
     database = Database(
         initial_config.get("lanaxy", {}).get(
             "database_file",
-            "/var/lib/lanaxy/lanaxy.db",
+            str(LANAXY_DATA_DIR / "lanaxy.db"),
         )
     )
 
@@ -406,7 +410,7 @@ def create_app() -> Flask:
             module_name = item["module"]
             custom_file = None
             if module_name.startswith("custom:"):
-                custom_file = Path("/etc/lanaxy/guardians.d") / (
+                custom_file = LANAXY_ETC_DIR / "guardians.d" / (
                     module_name.split(":", 1)[1] + ".py"
                 )
             localized = localize_plugin(
@@ -435,7 +439,7 @@ def create_app() -> Flask:
             module_name = item["module"]
             custom_file = None
             if module_name.startswith("custom:"):
-                custom_file = Path("/etc/lanaxy/beacons.d") / (
+                custom_file = LANAXY_ETC_DIR / "beacons.d" / (
                     module_name.split(":", 1)[1] + ".py"
                 )
             catalog[module_name] = localize_plugin(
@@ -623,7 +627,7 @@ def create_app() -> Flask:
             module_name = item["module"]
             custom_file = None
             if module_name.startswith("custom:"):
-                custom_file = Path("/etc/lanaxy/portals.d") / (
+                custom_file = LANAXY_ETC_DIR / "portals.d" / (
                     module_name.split(":", 1)[1] + ".py"
                 )
             result[module_name] = localize_plugin(
@@ -1982,7 +1986,7 @@ def create_app() -> Flask:
             state_store.save()
 
             smart_history = (
-                Path("/var/lib/lanaxy/guardian-state/smart") / f"{check_id}.json"
+                LANAXY_DATA_DIR / "guardian-state" / "smart" / f"{check_id}.json"
             )
             smart_history.unlink(missing_ok=True)
 
@@ -3240,7 +3244,7 @@ def create_app() -> Flask:
                 raise ValueError("Keine kompatiblen Guardians gefunden.")
 
             token = uuid.uuid4().hex
-            preview_dir = Path("/var/lib/lanaxy/import-previews")
+            preview_dir = LANAXY_DATA_DIR / "import-previews"
             preview_dir.mkdir(parents=True, exist_ok=True)
             preview_file = preview_dir / f"{token}.json"
             preview_file.write_text(
@@ -3267,7 +3271,7 @@ def create_app() -> Flask:
         token = request.form.get("token", "")
         if not re.fullmatch(r"[a-f0-9]{32}", token):
             abort(400)
-        preview_file = Path("/var/lib/lanaxy/import-previews") / f"{token}.json"
+        preview_file = LANAXY_DATA_DIR / "import-previews" / f"{token}.json"
         try:
             payload = json.loads(preview_file.read_text(encoding="utf-8"))
             imported = payload.get("checks", [])
@@ -3926,7 +3930,7 @@ def create_app() -> Flask:
         smart_history = []
         if check.get("guardian") == "smart":
             history_path = (
-                Path("/var/lib/lanaxy/guardian-state/smart")
+                LANAXY_DATA_DIR / "guardian-state" / "smart"
                 / f"{check_id}.json"
             )
             try:
@@ -5660,7 +5664,7 @@ def create_app() -> Flask:
             },
             database_path=config.get("lanaxy", {}).get(
                 "database_file",
-                "/var/lib/lanaxy/lanaxy.db",
+                str(LANAXY_DATA_DIR / "lanaxy.db"),
             ),
             system_mqtt=config.get("mqtt", {}),
             configured_language=config.get("web", {}).get(
@@ -5689,7 +5693,7 @@ def create_app() -> Flask:
             database_stats=database_stats(
                 config.get("lanaxy", {}).get(
                     "database_file",
-                    "/var/lib/lanaxy/lanaxy.db",
+                    str(LANAXY_DATA_DIR / "lanaxy.db"),
                 )
             ),
             backups=backup_items,
@@ -6545,7 +6549,7 @@ def create_app() -> Flask:
         config = service.load()
         database_path = config.get("lanaxy", {}).get(
             "database_file",
-            "/var/lib/lanaxy/lanaxy.db",
+            str(LANAXY_DATA_DIR / "lanaxy.db"),
         )
         try:
             backup = create_backup(
@@ -6612,7 +6616,7 @@ def create_app() -> Flask:
         config = service.load()
         database_path = config.get("lanaxy", {}).get(
             "database_file",
-            "/var/lib/lanaxy/lanaxy.db",
+            str(LANAXY_DATA_DIR / "lanaxy.db"),
         )
 
         try:
@@ -6654,7 +6658,7 @@ def create_app() -> Flask:
         config = service.load()
         database_path = config.get("lanaxy", {}).get(
             "database_file",
-            "/var/lib/lanaxy/lanaxy.db",
+            str(LANAXY_DATA_DIR / "lanaxy.db"),
         )
 
         temporary_path = None
@@ -6703,7 +6707,7 @@ def create_app() -> Flask:
         config = service.load()
         database_path = config.get("lanaxy", {}).get(
             "database_file",
-            "/var/lib/lanaxy/lanaxy.db",
+            str(LANAXY_DATA_DIR / "lanaxy.db"),
         )
         bundle = create_diagnostic_bundle(
             config,

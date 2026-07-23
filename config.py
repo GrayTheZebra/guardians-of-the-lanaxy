@@ -1,10 +1,11 @@
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 
-DEFAULT_CONFIG_PATH = "/etc/lanaxy/config.yaml"
+DEFAULT_CONFIG_PATH = os.environ.get("LANAXY_CONFIG", "/etc/lanaxy/config.yaml")
 
 
 def load_config(path: str = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
