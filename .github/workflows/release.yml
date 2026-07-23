@@ -25,6 +25,15 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y python3-yaml python3-paho-mqtt python3-requests python3-flask python3-gunicorn
+          
+          mkdir -p \
+            "$LANAXY_ETC_DIR" \
+            "$LANAXY_DATA_DIR" \
+            "$LANAXY_LOG_DIR"
+
+          cp examples/config.yaml "$LANAXY_CONFIG"
+          test -f "$LANAXY_CONFIG"
+          test -r "$LANAXY_CONFIG"
           bash -n bootstrap.sh
           bash -n deploy/lanaxy.de/install.sh
           bash -n scripts/deploy-public-installer.sh
