@@ -1,0 +1,84 @@
+name: LANaxy Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release prüfen
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          LANAXY_WEB_HOST: 127.0.0.1
+          LANAXY_WEB_PORT: "8090"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-yaml python3-paho-mqtt python3-requests python3-flask python3-gunicorn
+          bash -n bootstrap.sh
+          bash -n deploy/lanaxy.de/install.sh
+          bash -n scripts/deploy-public-installer.sh
+          bash -n install.sh
+          bash -n update.sh
+          cmp -s bootstrap.sh deploy/lanaxy.de/install.sh
+          test -f LICENSE
+          test -f THIRD_PARTY_LICENSES.md
+          test -f examples/config.yaml
+          grep -q '^  enabled: false$' examples/config.yaml
+          python3 -B -m compileall -q .
+          python3 -B -c "from web.run import app; assert app is not None"
+          python3 -B -m gunicorn --check-config --config web/gunicorn.conf.py web.run:app
+          VERSION="$(python3 -B -c 'from lanaxy import APP_VERSION; print(APP_VERSION)')"
+          test "v${VERSION}" = "$GITHUB_REF_NAME"
+      - name: Release-Archiv erstellen
+        run: |
+          rm -rf dist
+          mkdir -p dist/guardians-of-the-lanaxy
+          rsync -a ./ dist/guardians-of-the-lanaxy/ \
+            --exclude '.git' \
+            --exclude 'dist' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            --exclude '.pytest_cache' \
+            --exclude '.mypy_cache' \
+            --exclude '.ruff_cache'
+          find dist/guardians-of-the-lanaxy -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find dist/guardians-of-the-lanaxy -type f -name '*.py[co]' -delete
+          cd dist
+          zip -qr guardians-of-the-lanaxy.zip guardians-of-the-lanaxy
+          sha256sum guardians-of-the-lanaxy.zip > guardians-of-the-lanaxy.zip.sha256
+          cp ../bootstrap.sh install.sh
+          chmod 0755 install.sh
+          sha256sum install.sh > install.sh.sha256
+          if unzip -l guardians-of-the-lanaxy.zip | grep -E '(__pycache__|\.py[co]$)'; then
+            echo "Fehler: Python-Artefakte im Release-Archiv gefunden." >&2
+            exit 1
+          fi
+      - name: GitHub Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="RELEASE_NOTES_${GITHUB_REF_NAME#v}.md"
+          if [ -f "$NOTES" ]; then
+            gh release create "$GITHUB_REF_NAME" \
+              dist/guardians-of-the-lanaxy.zip \
+              dist/guardians-of-the-lanaxy.zip.sha256 \
+              dist/install.sh \
+              dist/install.sh.sha256 \
+              --title "Guardians of the LANaxy ${GITHUB_REF_NAME#v}" \
+              --notes-file "$NOTES"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/guardians-of-the-lanaxy.zip \
+              dist/guardians-of-the-lanaxy.zip.sha256 \
+              dist/install.sh \
+              dist/install.sh.sha256 \
+              --title "Guardians of the LANaxy ${GITHUB_REF_NAME#v}" \
+              --generate-notes
+          fi

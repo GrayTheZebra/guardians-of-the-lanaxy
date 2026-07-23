@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Portals · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+ <div><h1>Portals</h1><p>Kontrollierte Verbindungen externer Systeme zur LANaxy Control Engine</p></div>
+ <div class="heading-actions">
+  <a class="button" href="{{ url_for('portal_management') }}">Portal-Typen</a>
+  <div class="card-menu">
+   <button class="button primary kebab-trigger" type="button">+ Portal hinzufügen</button>
+   <div class="card-menu-panel beacon-type-menu" hidden>
+    {% for item in portal_types if item.status == 'loaded' %}
+    <a href="{{ url_for('portal_add', portal_type=item.module) }}">{{ item.name }}</a>
+    {% endfor %}
+   </div>
+  </div>
+ </div>
+</section>
+<div class="guardian-grid">
+{% for portal in portals %}
+ {% set meta=(portal_types|selectattr('module','equalto',portal.type)|list|first) %}
+ {% set health=runtime.get(portal.id,{}) %}
+ {% set state='active' if portal.get('enabled',true) and health.get('running') else ('error' if health.get('last_error') else 'disabled') %}
+ <article class="guardian-card status-{{ state }}">
+  <div class="guardian-top">
+   <span class="device-icon portal-device-icon">P</span>
+   <div class="guardian-title"><h2><a href="{{ url_for('portal_edit',portal_id=portal.id) }}">{{ portal.name }}</a></h2><p>{{ meta.name if meta else portal.type }}</p></div>
+   <span class="status-badge">{{ state }}</span>
+   <div class="card-menu">
+    <button class="kebab" type="button">⋮</button>
+    <div class="card-menu-panel" hidden>
+     <a href="{{ url_for('portal_edit',portal_id=portal.id) }}">Bearbeiten</a>
+     <form method="post" action="{{ url_for('portal_test',portal_id=portal.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button>Verbindung testen</button></form>
+     <form method="post" action="{{ url_for('portal_duplicate',portal_id=portal.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button>Duplizieren</button></form>
+     <form method="post" action="{{ url_for('portal_toggle',portal_id=portal.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button>{{ 'Deaktivieren' if portal.get('enabled',true) else 'Aktivieren' }}</button></form>
+     <form method="post" action="{{ url_for('portal_delete',portal_id=portal.id) }}" onsubmit="return confirm('Portal wirklich löschen?')"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="menu-danger">Löschen</button></form>
+    </div>
+   </div>
+  </div>
+  <p class="guardian-message">
+   {% if portal.type=='mqtt' %}{{ portal.host }}:{{ portal.get('port',1883) }} · {{ portal.command_topic }}
+   {% elif portal.type=='http' %}POST /api/control/command
+   {% else %}{{ meta.description if meta else 'Custom Portal' }}{% endif %}
+  </p>
+  <div class="guardian-stats">
+   <div><span>Status</span><strong>{{ 'Verbunden' if health.get('running') else 'Nicht aktiv' }}</strong></div>
+   <div><span>Letzter Fehler</span><strong>{{ health.get('last_error','Keiner') or 'Keiner' }}</strong></div>
+   <div><span>Befehle</span><strong>{{ portal.get('allowed_commands','*') }}</strong></div>
+  </div>
+ </article>
+{% else %}<div class="empty"><h2>Noch keine Portals</h2><p>Lege ein HTTP- oder MQTT-Portal an.</p></div>{% endfor %}
+</div>
+<script src="{{ url_for('static',filename='card-menu.js') }}"></script>
+{% endblock %}

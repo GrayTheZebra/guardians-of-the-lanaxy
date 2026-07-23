@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Module Manager · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <p class="eyebrow">Erweiterungen</p>
+        <h1>Module Manager</h1>
+        <p>Guardians, Beacons und Portals zentral verwalten</p>
+    </div>
+</section>
+
+<section class="module-summary-grid">
+    <article><strong>{{ total_modules }}</strong><span>Module gesamt</span></article>
+    <article><strong>{{ guardian_count }}</strong><span>Guardians</span></article>
+    <article><strong>{{ beacon_count }}</strong><span>Beacons</span></article>
+    <article><strong>{{ portal_count }}</strong><span>Portals</span></article>
+    <article><strong>{{ custom_count }}</strong><span>Custom Module</span></article>
+</section>
+
+<section class="module-install-card">
+    <div>
+        <h2>Modul-Paket installieren</h2>
+        <p>
+            Lade ein LANaxy-ZIP-Paket hoch. Der Typ wird automatisch erkannt.
+            Aktiviere „Vorhandenes Modul aktualisieren“, um ein Custom Modul
+            mit derselben ID zu ersetzen.
+        </p>
+    </div>
+    <form method="post" action="{{ url_for('module_install') }}"
+          enctype="multipart/form-data">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <input type="file" name="package" accept=".zip,application/zip" required>
+        <label class="checkbox-row">
+            <input type="checkbox" name="overwrite" value="1">
+            <span>Vorhandenes Custom Modul aktualisieren</span>
+        </label>
+        <button class="button primary" type="submit">Paket installieren</button>
+    </form>
+</section>
+
+<form class="filter-panel module-filter" method="get">
+    <label>
+        <span>Suche</span>
+        <input name="q" value="{{ query }}" placeholder="Name, Autor oder Modul">
+    </label>
+    <label>
+        <span>Typ</span>
+        <select name="type">
+            <option value="">Alle</option>
+            <option value="guardian" {% if selected_type == 'guardian' %}selected{% endif %}>Guardians</option>
+            <option value="beacon" {% if selected_type == 'beacon' %}selected{% endif %}>Beacons</option>
+            <option value="portal" {% if selected_type == 'portal' %}selected{% endif %}>Portals</option>
+        </select>
+    </label>
+    <label>
+        <span>Quelle</span>
+        <select name="source">
+            <option value="">Alle</option>
+            <option value="builtin" {% if selected_source == 'builtin' %}selected{% endif %}>Integriert</option>
+            <option value="custom" {% if selected_source == 'custom' %}selected{% endif %}>Custom</option>
+        </select>
+    </label>
+    <div class="filter-actions">
+        <button class="button primary">Filtern</button>
+        <a class="button" href="{{ url_for('modules_page') }}">Zurücksetzen</a>
+    </div>
+</form>
+
+<div class="module-grid">
+{% for module in modules %}
+    <article class="module-card module-type-{{ module.type }} status-{{ module.status }}">
+        <div class="module-card-head">
+            <span class="module-type-badge {{ module.type }}">{{ module.type_label }}</span>
+            <span class="source-badge {{ module.source }}">
+                {{ 'Integriert' if module.source == 'builtin' else 'Custom' }}
+            </span>
+        </div>
+        <div class="module-icon">
+            <svg><use href="#icon-{{ module.get('icon', 'settings') }}"/></svg>
+        </div>
+        <h2>{{ module.get('name', module.module) }}</h2>
+        <p>{{ module.get('description') or module.get('error') or 'Keine Beschreibung vorhanden.' }}</p>
+        <dl>
+            <div><dt>Version</dt><dd>{{ module.version }}</dd></div>
+            <div><dt>Autor</dt><dd>{{ module.author }}</dd></div>
+            <div><dt>Instanzen</dt><dd>{{ module.instance_count }}</dd></div>
+            <div><dt>Status</dt><dd>{{ module.status }}</dd></div>
+        </dl>
+        <a class="button" href="{{ url_for('module_detail', module_type=module.type, module_name=module.module) }}">
+            Details öffnen
+        </a>
+    </article>
+{% else %}
+    <div class="empty">
+        <h2>Keine Module gefunden</h2>
+        <p>Die gewählten Filter liefern keine Treffer.</p>
+    </div>
+{% endfor %}
+</div>
+{% endblock %}

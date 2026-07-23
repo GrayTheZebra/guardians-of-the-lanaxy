@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ group_name }} · Guardians{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Guardian-Gruppe</p><h1>{{ group_name }}</h1><p>{{ guardians|length }} Guardians in dieser Gruppe</p><form class="bulk-toolbar" method="post" action="{{url_for('guardian_group_edit',group_name=group_name)}}"><input type="hidden" name="_csrf_token" value="{{csrf_token()}}"><select name="action"><option value="enable">Alle aktivieren</option><option value="disable">Alle deaktivieren</option><option value="rename">Gruppe umbenennen</option><option value="settings">Intervalle ändern</option></select><input name="new_group" placeholder="Neuer Gruppenname"><input type="number" name="interval" placeholder="Intervall"><input type="number" name="timeout" placeholder="Timeout"><input type="number" name="retries" placeholder="Retries"><button class="button">Anwenden</button></form></div>
+  <div class="heading-actions">
+    <form method="post" action="{{ url_for('guardian_group_test', group_name=group_name) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button primary">Gruppe jetzt prüfen</button></form>
+    <a class="button" href="{{ url_for('guardian_management') }}">Zurück</a>
+  </div>
+</div>
+<div class="management-grid">
+{% for item in guardians %}
+<article class="management-card">
+  <div class="channel-title"><span class="device-icon icon-{{ item.metadata.get('icon','network') }}"><svg><use href="#icon-{{ item.metadata.get('icon','network') }}"/></svg></span><div><h3>{{ item.check.name }}</h3><p>{{ item.metadata.get('name', item.check.guardian) }}</p></div></div>
+  <p>{{ item.state.get('message','Noch keine Prüfung') }}</p>
+  <div class="form-actions"><a class="button" href="{{ url_for('guardian_detail', check_id=item.check.id) }}">Details</a><a class="button" href="{{ url_for('edit_guardian', check_id=item.check.id) }}">Bearbeiten</a></div>
+</article>
+{% endfor %}
+</div>
+{% endblock %}

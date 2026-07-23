@@ -1,0 +1,29 @@
+{
+  "name": "Webhook",
+  "description": "Sends events as JSON over HTTP.",
+  "category": "Developer",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "url": {
+      "label": "URL"
+    },
+    "method": {
+      "label": "Method"
+    },
+    "bearer_token": {
+      "label": "Bearer token"
+    },
+    "headers": {
+      "label": "Additional headers",
+      "help": "One header per line, e.g. X-API-Key: secret"
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    },
+    "verify_tls": {
+      "label": "Verify TLS certificate"
+    }
+  }
+}

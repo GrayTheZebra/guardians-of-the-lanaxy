@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_launchpad_progress.html" import launchpad_progress %}
+{% block title %}Mission prüfen · Launchpad{% endblock %}
+{% block content %}
+{{ launchpad_progress(4) }}
+
+<section class="launchpad-heading">
+    <div>
+        <p class="eyebrow">Launchpad · Missionskontrolle</p>
+        <h1>Bereit zum Start</h1>
+        <p>Prüfe die geplante Konfiguration. Erst beim Start werden die Komponenten angelegt.</p>
+    </div>
+</section>
+
+<section class="launchpad-explanation launchpad-explanation-success">
+    <span class="launchpad-explanation-icon">✓</span>
+    <div>
+        <h2>Noch wurde nichts gespeichert</h2>
+        <p>
+            Prüfe hier die geplante Mission. Mit „Ändern“ kannst du jeden
+            Abschnitt korrigieren. Erst der Button „Überwachung starten“ legt
+            Guardian, Beacon und Rule gemeinsam an und lädt LANaxy neu.
+        </p>
+    </div>
+</section>
+
+<div class="launchpad-review-grid">
+    <article class="launchpad-review-card">
+        <span>1</span>
+        <div>
+            <small>Guardian</small>
+            <h2>{{ mission.steps.guardian.get('name', guardian_meta.get('name', 'Guardian')) }}</h2>
+            <p>{{ guardian_meta.get('name', mission.guardian_type) }}</p>
+        </div>
+        <a href="{{ url_for('launchpad_guardian_config', mission_id=mission.id, guardian_type=mission.guardian_type) }}">Ändern</a>
+    </article>
+
+    <article class="launchpad-review-card">
+        <span>2</span>
+        <div>
+            <small>Beacon</small>
+            {% if mission.beacon_mode == 'new' %}
+                <h2>{{ mission.steps.get('beacon', {}).get('name', beacon_meta.get('name', 'Neuer Beacon')) }}</h2>
+                <p>Neue Instanz · {{ beacon_meta.get('name', mission.beacon_type) }}</p>
+            {% elif mission.beacon_mode == 'existing' %}
+                {% set existing_beacon = config.notifications.channels|selectattr('id', 'equalto', mission.beacon_existing)|list|first %}
+                <h2>{{ existing_beacon.name if existing_beacon else mission.beacon_existing }}</h2>
+                <p>Vorhandene Instanz</p>
+            {% else %}
+                <h2>Kein Beacon</h2>
+                <p>Benachrichtigungen können später ergänzt werden.</p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('launchpad_beacon_select', mission_id=mission.id) }}">Ändern</a>
+    </article>
+
+    <article class="launchpad-review-card">
+        <span>3</span>
+        <div>
+            <small>Rules</small>
+            {% if mission.rule_mode == 'new' %}
+                <h2>{{ mission.steps.get('rule', {}).get('name', 'Neue Rule') }}</h2>
+                <p>Eigene Rule</p>
+            {% elif mission.rule_mode == 'existing' %}
+                {% set existing_rule = config.notifications.rules|selectattr('id', 'equalto', mission.rule_existing)|list|first %}
+                <h2>{{ existing_rule.name if existing_rule else mission.rule_existing }}</h2>
+                <p>Vorhandene Rule</p>
+            {% elif mission.rule_mode == 'default' %}
+                <h2>Default</h2>
+                <p>Alle Guardians und Beacons</p>
+            {% else %}
+                <h2>Keine Rule</h2>
+                <p>Keine Benachrichtigungsregel</p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('launchpad_rule_select', mission_id=mission.id) }}">Ändern</a>
+    </article>
+</div>
+
+<section class="launchpad-launch-card">
+    <div>
+        <h2>Mission starten</h2>
+        <p>
+            LANaxy legt die ausgewählten Komponenten gemeinsam an und lädt die
+            Konfiguration anschließend ohne Dienstunterbrechung neu.
+        </p>
+    </div>
+    <form method="post" action="{{ url_for('launchpad_finish', mission_id=mission.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <button class="button primary launch-button" type="submit">
+            Überwachung starten
+        </button>
+    </form>
+</section>
+{% endblock %}

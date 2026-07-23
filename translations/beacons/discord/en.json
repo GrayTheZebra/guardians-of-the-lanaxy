@@ -1,0 +1,26 @@
+{
+  "name": "Discord",
+  "description": "Sends formatted notifications to a Discord webhook.",
+  "category": "Messenger",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "webhook_url": {
+      "label": "Webhook URL"
+    },
+    "username": {
+      "label": "Display name"
+    },
+    "avatar_url": {
+      "label": "Avatar URL"
+    },
+    "mention": {
+      "label": "Mention",
+      "help": "Optional, e.g. @everyone or a role ID."
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    }
+  }
+}

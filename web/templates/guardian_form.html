@@ -1,0 +1,633 @@
+{% extends "base.html" %}
+{% macro render_field(key, field) -%}
+    {% set current = get_nested(check, key) %}
+    {% set visible = field.get('visible_if') %}
+    <label class="field"
+           data-visible-field="{{ visible.field if visible else '' }}"
+           data-visible-value="{{ visible.equals if visible and visible.get('equals') is not none else '' }}"
+           data-visible-values="{{ visible.get('in', [])|join('|') if visible else '' }}">
+        <span>{% if key == 'id' %}Guardian-ID{% else %}{{ field.label }}{% endif %}{% if field.required and key != 'id' %} *{% endif %}</span>
+
+        {% if field.type == 'select' %}
+            <select name="{{ key }}" {% if field.required and key != 'id' %}required{% endif %}>
+                {% for option in field.options %}
+                    {% set selected_value = current if current is not none else field.get('default') %}
+                    <option value="{{ option.value }}" {% if selected_value == option.value %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+            </select>
+        {% elif field.type == 'checkbox' %}
+            {% set checked = current if current is not none else field.get('default', false) %}
+            <input type="checkbox" name="{{ key }}" value="1" {% if checked %}checked{% endif %}>
+        {% elif field.type == 'textarea' %}
+            {% set value = current if current is not none else field.get('default', '') %}
+            <textarea name="{{ key }}" {% if field.required and key != 'id' %}required{% endif %}>{{ value }}</textarea>
+        {% else %}
+            {% if field.secret and current and not preserve_submitted_secrets %}
+                {% set value = secret_placeholder %}
+            {% else %}
+                {% set value = current if current is not none else field.get('default', '') %}
+            {% endif %}
+            {% if metadata.module == 'proxmox_api' and key == 'node' %}
+            <div class="proxmox-node-field">
+                <input type="text" name="{{ key }}" value="{{ value }}" autocomplete="off" placeholder="Automatisch erkennen">
+                <button class="button" id="proxmox-discover-nodes" type="button">Nodes erkennen</button>
+            </div>
+            <select id="proxmox-discovered-nodes" class="discovery-select" hidden>
+                <option value="">Node auswählen …</option>
+            </select>
+            <small class="field-hint" id="proxmox-discovery-status">Bei genau einem gefundenen Node wird er automatisch eingetragen.</small>
+            {% elif metadata.module == 'proxmox_api' and key == 'storage' %}
+            <div class="proxmox-storage-field">
+                <input type="text" name="{{ key }}" value="{{ value }}" autocomplete="off">
+                <button class="button" id="proxmox-discover-storages" type="button">Storages erkennen</button>
+            </div>
+            <select id="proxmox-discovered-storages" class="discovery-select" hidden>
+                <option value="">Storage auswählen …</option>
+            </select>
+            <small class="field-hint" id="proxmox-storage-discovery-status">Node und Zugangsdaten eintragen, anschließend Storages abrufen.</small>
+            {% elif metadata.module == 'proxmox_backup_server' and key == 'datastore' %}
+            <div class="proxmox-storage-field">
+                <input type="text" name="{{ key }}" value="{{ value }}" autocomplete="off">
+                <button class="button pbs-discover-targets" type="button">PBS-Ziele erkennen</button>
+            </div>
+            <select id="pbs-discovered-datastores" class="discovery-select" hidden><option value="">Datastore auswählen …</option></select>
+            <small class="field-hint pbs-discovery-status">Zugangsdaten eintragen, anschließend Datastores und weitere PBS-Ziele automatisch abrufen.</small>
+            {% elif metadata.module == 'proxmox_backup_server' and key == 'backup_id' %}
+            <div class="proxmox-guest-field">
+                <input type="text" name="{{ key }}" value="{{ value }}" autocomplete="off">
+                <button class="button pbs-discover-targets" type="button">Backup-Gruppen erkennen</button>
+            </div>
+            <select id="pbs-discovered-groups" class="discovery-select" hidden><option value="">Backup-Gruppe auswählen …</option></select>
+            <small class="field-hint pbs-discovery-status">Datastore, Namespace, Backup-Typ und Backup-ID werden gemeinsam übernommen.</small>
+            {% elif metadata.module == 'proxmox_backup_server' and key == 'job_id' %}
+            <div class="proxmox-storage-field">
+                <input type="text" name="{{ key }}" value="{{ value }}" autocomplete="off">
+                <button class="button pbs-discover-targets" type="button">PBS-Jobs erkennen</button>
+            </div>
+            <select id="pbs-discovered-jobs" class="discovery-select" hidden><option value="">PBS-Job auswählen …</option></select>
+            <small class="field-hint pbs-discovery-status">Jobtyp und Job-ID werden automatisch eingetragen.</small>
+            {% elif metadata.module == 'proxmox_backup_server' and key == 'remote' %}
+            <div class="proxmox-storage-field">
+                <input type="text" name="{{ key }}" value="{{ value }}" autocomplete="off">
+                <button class="button pbs-discover-targets" type="button">Remotes erkennen</button>
+            </div>
+            <select id="pbs-discovered-remotes" class="discovery-select" hidden><option value="">PBS-Remote auswählen …</option></select>
+            <small class="field-hint pbs-discovery-status">Konfigurierte PBS-Gegenstellen werden über die API geladen.</small>
+            {% elif metadata.module == 'proxmox_api' and key == 'vmid' %}
+            <div class="proxmox-guest-field">
+                <input type="number" name="{{ key }}" value="{{ value }}" min="1" autocomplete="off">
+                <button class="button" id="proxmox-discover-guests" type="button">VMs/LXCs erkennen</button>
+            </div>
+            <select id="proxmox-discovered-guests" class="discovery-select" hidden>
+                <option value="">VM oder LXC auswählen …</option>
+            </select>
+            <small class="field-hint" id="proxmox-guest-discovery-status">Node und Zugangsdaten eintragen, anschließend VMs und LXCs abrufen.</small>
+            {% else %}
+            <input
+                type="{{ 'text' if field.type in ['slug', 'url'] else ('password' if field.secret else field.type) }}"
+                name="{{ key }}"
+                value="{{ value }}"
+                {% if field.required and key != 'id' %}required{% endif %}
+                {% if field.get('min') is not none %}min="{{ field.min }}"{% endif %}
+                autocomplete="{{ 'new-password' if field.secret else 'off' }}"
+            >
+            {% endif %}
+            {% if key == 'id' %}
+                <small class="field-hint">Optional. Wird automatisch aus dem Namen erzeugt, zum Beispiel <code>mein_pc_1</code>.</small>
+            {% endif %}
+        {% endif %}
+        {% if field.get('hint') %}<small class="field-hint">{{ field.hint }}</small>{% endif %}
+        {% if field.get('help_url') %}
+            <small class="field-hint"><a href="{{ field.help_url }}" target="_blank" rel="noopener noreferrer">{{ field.get('help_url_label', 'Dokumentation öffnen') }}</a></small>
+        {% endif %}
+    </label>
+{%- endmacro %}
+
+{% macro section_card(section, schema) -%}
+<section class="guardian-form-section guardian-form-section--{{ section['accent'] }}"
+         {% if section.get('modes') %}data-mode-section="{{ section['modes']|join('|') }}"{% endif %}>
+    <div class="guardian-form-section__header">
+        <span class="guardian-form-section__icon"><svg><use href="#icon-{{ section['icon'] }}"/></svg></span>
+        <div>
+            <h2>{{ section['title'] }}</h2>
+            <p>{{ section['description'] }}</p>
+        </div>
+    </div>
+    <div class="form-grid guardian-form-section__grid">
+        {% for key in section['fields'] %}
+            {{ render_field(key, schema[key]) }}
+        {% endfor %}
+    </div>
+</section>
+{%- endmacro %}
+
+{% block title %}{{ metadata.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-heading">
+    <div>
+        <p class="eyebrow">{{ 'Guardian bearbeiten' if mode == 'edit' else 'Neuer Guardian' }}</p>
+        <h1>{{ metadata.name }}</h1>
+        <p>{{ metadata.description }}</p>
+    </div>
+    <a class="button" href="{{ url_for('dashboard') }}">Zurück</a>
+</div>
+
+{% if check.get('_import_missing_secrets') %}
+<aside class="guardian-mode-help guardian-mode-help--warning import-secret-warning">
+    <span class="guardian-mode-help__icon"><svg><use href="#icon-warning"/></svg></span>
+    <div>
+        <strong>Zugangsdaten fehlen</strong>
+        <p>Dieser Guardian wurde ohne Secrets importiert und bleibt deaktiviert. Sobald alle fehlenden Zugangsdaten eingetragen und gespeichert wurden, wird er automatisch aktiviert.</p>
+        <p><b>Fehlende Felder:</b> {{ check.get('_import_missing_secrets')|join(', ') }}</p>
+    </div>
+</aside>
+{% endif %}
+<form class="config-form" method="post">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="type" value="{{ metadata.module }}">
+    {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
+
+    {% if metadata.module == 'proxmox_api' %}
+        {% set sections = [
+            {'title':'Basis','description':'Name, Prüfmodus und Zeitverhalten des Guardians.','icon':'settings','accent':'basis','fields':['name','id','mode','interval','timeout','retries']},
+            {'title':'API-Daten','description':'Verbindung und Authentifizierung zur Proxmox VE API.','icon':'key','accent':'api','fields':['api_url','token_id','token_secret','verify_tls']},
+            {'title':'Node & Erkennung','description':'Node manuell angeben oder direkt über die Proxmox API erkennen.','icon':'server','accent':'node','fields':['node']},
+            {'title':'Node-Prüfung','description':'Zusätzliche Anforderungen für eine direkte Node-Prüfung.','icon':'uptime','accent':'node-check','fields':['minimum_uptime_minutes'],'modes':['node']},
+            {'title':'Gast (VM / LXC)','description':'Eine VM oder einen LXC-Container auswählen und dessen Status prüfen.','icon':'container','accent':'guest','fields':['guest_type','vmid','expected_status','minimum_uptime_minutes'],'modes':['guest']},
+            {'title':'Storage','description':'Storage auswählen und Grenzwerte für die Belegung festlegen.','icon':'database','accent':'storage','fields':['storage','warning_used_percent','critical_used_percent'],'modes':['storage']}
+        ] %}
+
+        <aside class="guardian-mode-help" id="proxmox-mode-help">
+            <span class="guardian-mode-help__icon"><svg><use href="#icon-info"/></svg></span>
+            <div><strong id="proxmox-mode-help-title">Prüfmodus</strong><p id="proxmox-mode-help-text"></p></div>
+        </aside>
+        <div class="guardian-target-summary"><span>Prüfziel</span><strong id="proxmox-target-summary">wird aus den Eingaben ermittelt</strong></div>
+
+        <div class="guardian-form-sections guardian-form-sections--proxmox">
+            {% for section in sections %}{{ section_card(section, metadata.schema) }}{% endfor %}
+        </div>
+
+    {% elif metadata.module == 'proxmox_backup_server' %}
+        {% set sections = [
+            {'title':'Basis','description':'Name, Prüfmodus und Intervalle des Backup-Server-Guardians.','icon':'settings','accent':'basis','fields':['name','id','mode','interval','timeout','retries']},
+            {'title':'API-Daten','description':'Verbindung und API-Token des Proxmox Backup Servers.','icon':'key','accent':'api','fields':['api_url','token_id','token_secret','verify_tls']},
+            {'title':'Datastore auswählen','description':'Datastore manuell angeben oder über die PBS-API erkennen.','icon':'archive','accent':'datastore','fields':['datastore'],'modes':['datastore','backup']},
+            {'title':'Belegungsgrenzen','description':'Warning- und Critical-Grenzen für die Datastore-Belegung festlegen.','icon':'database','accent':'storage','fields':['warning_used_percent','critical_used_percent'],'modes':['datastore']},
+            {'title':'Backup-Gruppe','description':'Backup-Gruppe auswählen und das zulässige Alter der letzten Sicherung festlegen.','icon':'container','accent':'guest','fields':['namespace','backup_type','backup_id','warning_age_hours','critical_age_hours'],'modes':['backup']},
+            {'title':'PBS-Job','description':'Verify-, Prune-, Sync- oder Garbage-Collection-Job prüfen.','icon':'uptime','accent':'storage','fields':['job_type','job_id'],'modes':['job']},
+            {'title':'PBS-Remote','description':'Konfiguration einer PBS-Gegenstelle überwachen.','icon':'network','accent':'api','fields':['remote'],'modes':['remote']}
+        ] %}
+
+        <aside class="guardian-mode-help guardian-mode-help--pbs">
+            <span class="guardian-mode-help__icon"><svg><use href="#icon-info"/></svg></span>
+            <div><strong id="pbs-mode-help-title">PBS-Server prüfen</strong><p id="pbs-mode-help-text"></p></div>
+        </aside>
+        <div class="guardian-target-summary"><span>Prüfziel</span><strong id="pbs-target-summary">Proxmox Backup Server</strong></div>
+
+        <div class="guardian-form-sections guardian-form-sections--pbs">
+            {% for section in sections %}{{ section_card(section, metadata.schema) }}{% endfor %}
+        </div>
+
+    {% else %}
+        <div class="form-grid">
+        {% for key, field in metadata.schema.items() if key != 'device_id' %}{{ render_field(key, field) }}{% endfor %}
+        </div>
+    {% endif %}
+
+    <section class="generic-settings">
+        <h2>Organisation und Abhängigkeiten</h2>
+        <div class="form-grid">
+            <label class="field">
+                <span>Gruppe</span>
+                <input type="text" name="group" value="{{ check.get('group', '') }}" list="guardian-groups" placeholder="zum Beispiel Smart Home">
+                <datalist id="guardian-groups">{% for group in groups %}<option value="{{ group }}">{% endfor %}</datalist>
+                <small class="field-hint">Optional. Guardians derselben Gruppe werden im Dashboard zusammengefasst.</small>
+            </label>
+            <label class="field">
+                <span>Tags</span>
+                <input type="text" name="tags" value="{{ check.get('tags', [])|join(', ') }}" placeholder="zum Beispiel proxmox, produktiv, keller">
+                <small class="field-hint">Mehrere Tags mit Komma trennen.</small>
+            </label>
+            <div class="field">
+                <span>Abhängig von</span>
+                <div class="multi-checkbox-grid">
+                    {% for other in all_checks if other.id != check.get('id') %}
+                    <label class="multi-checkbox-option">
+                        <input type="checkbox" name="depends_on" value="{{ other.id }}" {% if other.id in check.get('depends_on', []) %}checked{% endif %}>
+                        <span><strong>{{ other.name }}</strong><small>{{ other.id }}</small></span>
+                    </label>
+                    {% else %}<p class="empty-choice">Keine weiteren Guardians vorhanden.</p>{% endfor %}
+                </div>
+                <small class="field-hint">Mehrere Abhängigkeiten können direkt angehakt werden.</small>
+            </div>
+        </div>
+    </section>
+
+    <label class="toggle-row">
+        <input type="checkbox" name="enabled" value="1" {% if check.get('enabled', true) %}checked{% endif %}> Guardian aktiv
+    </label>
+    <div class="form-actions">
+        <button class="button primary" type="submit">Speichern und LANaxy neu starten</button>
+        <a class="button" href="{{ url_for('dashboard') }}">Abbrechen</a>
+    </div>
+</form>
+
+<script>
+function updateConditionalFields() {
+    document.querySelectorAll('[data-visible-field]').forEach((element) => {
+        const fieldName = element.dataset.visibleField;
+        if (!fieldName) return;
+        const controller = document.querySelector(`[name="${fieldName}"]`);
+        if (!controller) return;
+        const controllerValue = controller.type === 'checkbox' ? (controller.checked ? '1' : '0') : controller.value;
+        const allowedValues = element.dataset.visibleValues
+            ? element.dataset.visibleValues.split('|')
+            : [element.dataset.visibleValue];
+        const visible = allowedValues.includes(controllerValue);
+        element.hidden = !visible;
+        element.querySelectorAll('input, select, textarea').forEach((input) => {
+            input.disabled = !visible;
+        });
+    });
+}
+document.querySelectorAll('select, input[type="checkbox"]').forEach((select) => {
+    select.addEventListener('change', updateConditionalFields);
+});
+
+const nameInput = document.querySelector('[name="name"]');
+const idInput = document.querySelector('[name="id"]');
+
+function slugifyGuardianName(value) {
+    return value
+        .toLowerCase()
+        .replaceAll("ä", "ae")
+        .replaceAll("ö", "oe")
+        .replaceAll("ü", "ue")
+        .replaceAll("ß", "ss")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "");
+}
+
+if (nameInput && idInput && !idInput.value) {
+    let idWasEdited = false;
+
+    idInput.addEventListener("input", () => {
+        idWasEdited = Boolean(idInput.value);
+    });
+
+    nameInput.addEventListener("input", () => {
+        if (!idWasEdited) {
+            const slug = slugifyGuardianName(nameInput.value);
+            idInput.placeholder = slug ? `${slug}_1` : "wird automatisch erzeugt";
+        }
+    });
+}
+
+
+const proxmoxStorageDiscoverButton = document.getElementById("proxmox-discover-storages");
+if (proxmoxStorageDiscoverButton) {
+    proxmoxStorageDiscoverButton.addEventListener("click", async () => {
+        const status = document.getElementById("proxmox-storage-discovery-status");
+        const storageInput = document.querySelector('[name="storage"]');
+        const nodeInput = document.querySelector('[name="node"]');
+        const datalist = document.getElementById("proxmox-discovered-storages");
+        proxmoxStorageDiscoverButton.disabled = true;
+        proxmoxStorageDiscoverButton.textContent = "Erkennung läuft …";
+        const formData = new FormData();
+        ["api_url", "token_id", "token_secret", "timeout", "node"].forEach((name) => {
+            const input = document.querySelector(`[name="${name}"]`);
+            if (input) formData.append(name, input.value);
+        });
+        const verifyTls = document.querySelector('[name="verify_tls"]');
+        if (verifyTls?.checked) formData.append("verify_tls", "1");
+        {% if mode == 'edit' %}formData.append("check_id", {{ check.get('id', '')|tojson }});{% endif %}
+        try {
+            const response = await fetch({{ url_for('proxmox_discover_storages')|tojson }}, {
+                method: "POST",
+                headers: {"X-CSRF-Token": {{ csrf_token()|tojson }}},
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+            if (nodeInput && !nodeInput.value) nodeInput.value = data.node;
+            datalist.replaceChildren(new Option("Storage auswählen …", ""));
+            data.storages.forEach((storage) => {
+                const label = `${storage.storage}${storage.type ? ` · ${storage.type}` : ""}${storage.used_percent !== null ? ` · ${storage.used_percent} %` : ""}`;
+                datalist.add(new Option(label, storage.storage));
+            });
+            datalist.hidden = data.storages.length <= 1;
+            datalist.onchange = () => {
+                if (datalist.value) {
+                    storageInput.value = datalist.value;
+                    status.textContent = `Storage „${datalist.value}“ wurde ausgewählt.`;
+                }
+            };
+            if (data.auto_selected) {
+                storageInput.value = data.auto_selected;
+                status.textContent = `Storage „${data.auto_selected}“ wurde automatisch eingetragen.`;
+            } else {
+                status.textContent = `${data.storages.length} Storages gefunden: ${data.storages.map((item) => item.storage).join(", ")}.`;
+                storageInput.focus();
+            }
+        } catch (error) {
+            status.textContent = `Storage-Erkennung fehlgeschlagen: ${error.message}`;
+        } finally {
+            proxmoxStorageDiscoverButton.disabled = false;
+            proxmoxStorageDiscoverButton.textContent = "Storages erkennen";
+        }
+    });
+}
+
+const proxmoxGuestDiscoverButton = document.getElementById("proxmox-discover-guests");
+if (proxmoxGuestDiscoverButton) {
+    proxmoxGuestDiscoverButton.addEventListener("click", async () => {
+        const status = document.getElementById("proxmox-guest-discovery-status");
+        const vmidInput = document.querySelector('[name="vmid"]');
+        const guestTypeInput = document.querySelector('[name="guest_type"]');
+        const nodeInput = document.querySelector('[name="node"]');
+        const datalist = document.getElementById("proxmox-discovered-guests");
+
+        proxmoxGuestDiscoverButton.disabled = true;
+        proxmoxGuestDiscoverButton.textContent = "Erkennung läuft …";
+        status.textContent = "LANaxy fragt Proxmox nach VMs und LXC-Containern.";
+
+        const formData = new FormData();
+        ["api_url", "token_id", "token_secret", "timeout", "node"].forEach((name) => {
+            const input = document.querySelector(`[name="${name}"]`);
+            if (input) formData.append(name, input.value);
+        });
+        const verifyTls = document.querySelector('[name="verify_tls"]');
+        if (verifyTls?.checked) formData.append("verify_tls", "1");
+        {% if mode == 'edit' %}formData.append("check_id", {{ check.get('id', '')|tojson }});{% endif %}
+
+        try {
+            const response = await fetch({{ url_for('proxmox_discover_guests')|tojson }}, {
+                method: "POST",
+                headers: {"X-CSRF-Token": {{ csrf_token()|tojson }}},
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+
+            if (nodeInput && !nodeInput.value && data.node) nodeInput.value = data.node;
+            datalist.replaceChildren(new Option("VM oder LXC auswählen …", ""));
+            data.guests.forEach((guest) => {
+                const label = `${guest.type_label} ${guest.vmid} · ${guest.name}${guest.status ? ` · ${guest.status}` : ""}`;
+                const option = new Option(label, String(guest.vmid));
+                option.dataset.guestType = guest.type;
+                datalist.add(option);
+            });
+            datalist.hidden = data.guests.length <= 1;
+            datalist.onchange = () => {
+                const selected = data.guests.find((guest) => String(guest.vmid) === datalist.value);
+                if (selected) chooseGuest(selected);
+            };
+
+            const chooseGuest = (guest) => {
+                vmidInput.value = String(guest.vmid);
+                if (guestTypeInput) guestTypeInput.value = guest.type;
+                status.textContent = `${guest.type_label} „${guest.name}“ mit ID ${guest.vmid} wurde eingetragen.`;
+                updateConditionalFields();
+            };
+
+            if (data.auto_selected) {
+                chooseGuest(data.auto_selected);
+            } else if (data.guests.length) {
+                status.textContent = `${data.guests.length} Gäste auf Node „${data.node}“ gefunden. ID auswählen; der Gasttyp wird automatisch angepasst.`;
+                vmidInput.focus();
+            } else {
+                status.textContent = `Auf Node „${data.node}“ wurden keine VMs oder LXCs gefunden.`;
+            }
+
+            vmidInput.oninput = () => {
+                const selected = data.guests.find((guest) => String(guest.vmid) === vmidInput.value);
+                if (selected && guestTypeInput) {
+                    guestTypeInput.value = selected.type;
+                    status.textContent = `${selected.type_label} „${selected.name}“ ausgewählt.`;
+                    updateConditionalFields();
+                }
+            };
+        } catch (error) {
+            status.textContent = `Gast-Erkennung fehlgeschlagen: ${error.message}`;
+        } finally {
+            proxmoxGuestDiscoverButton.disabled = false;
+            proxmoxGuestDiscoverButton.textContent = "VMs/LXCs erkennen";
+        }
+    });
+}
+
+const proxmoxDiscoverButton = document.getElementById("proxmox-discover-nodes");
+if (proxmoxDiscoverButton) {
+    proxmoxDiscoverButton.addEventListener("click", async () => {
+        const status = document.getElementById("proxmox-discovery-status");
+        const nodeInput = document.querySelector('[name="node"]');
+        const datalist = document.getElementById("proxmox-discovered-nodes");
+        proxmoxDiscoverButton.disabled = true;
+        proxmoxDiscoverButton.textContent = "Erkennung läuft …";
+        status.textContent = "LANaxy fragt die Proxmox API nach vorhandenen Nodes.";
+
+        const formData = new FormData();
+        ["api_url", "token_id", "token_secret", "timeout"].forEach((name) => {
+            const input = document.querySelector(`[name="${name}"]`);
+            if (input) formData.append(name, input.value);
+        });
+        const verifyTls = document.querySelector('[name="verify_tls"]');
+        if (verifyTls?.checked) formData.append("verify_tls", "1");
+        {% if mode == 'edit' %}formData.append("check_id", {{ check.get('id', '')|tojson }});{% endif %}
+
+        try {
+            const response = await fetch({{ url_for('proxmox_discover_nodes')|tojson }}, {
+                method: "POST",
+                headers: {"X-CSRF-Token": {{ csrf_token()|tojson }}},
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+            datalist.replaceChildren(new Option("Node auswählen …", ""));
+            data.nodes.forEach((node) => datalist.add(new Option(node.status ? `${node.name} · ${node.status}` : node.name, node.name)));
+            datalist.hidden = data.nodes.length <= 1;
+            datalist.onchange = () => {
+                if (datalist.value) {
+                    nodeInput.value = datalist.value;
+                    status.textContent = `Node „${datalist.value}“ wurde ausgewählt.`;
+                }
+            };
+            if (data.auto_selected) {
+                nodeInput.value = data.auto_selected;
+                status.textContent = `Node „${data.auto_selected}“ wurde automatisch erkannt und eingetragen.`;
+            } else {
+                status.textContent = `${data.nodes.length} Nodes gefunden: ${data.nodes.map((node) => node.name).join(", ")}. Bitte einen auswählen.`;
+                nodeInput.focus();
+            }
+        } catch (error) {
+            status.textContent = `Node-Erkennung fehlgeschlagen: ${error.message}`;
+        } finally {
+            proxmoxDiscoverButton.disabled = false;
+            proxmoxDiscoverButton.textContent = "Nodes erkennen";
+        }
+    });
+}
+
+
+const pbsDiscoveryButtons = document.querySelectorAll(".pbs-discover-targets");
+if (pbsDiscoveryButtons.length) {
+    const setPbsStatus = (message) => document.querySelectorAll(".pbs-discovery-status").forEach((node) => { node.textContent = message; });
+    const fillSelect = (id, placeholder, rows, valueOf, labelOf, onChoose) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        select.replaceChildren(new Option(placeholder, ""));
+        rows.forEach((row, index) => {
+            const option = new Option(labelOf(row), String(index));
+            select.add(option);
+        });
+        select.hidden = rows.length === 0;
+        select.onchange = () => {
+            if (select.value === "") return;
+            const row = rows[Number(select.value)];
+            if (row) onChoose(row);
+        };
+    };
+    const discoverPbsTargets = async () => {
+        pbsDiscoveryButtons.forEach((button) => { button.disabled = true; });
+        setPbsStatus("LANaxy fragt den Proxmox Backup Server nach Datastores, Backup-Gruppen, Jobs und Remotes.");
+        const formData = new FormData();
+        ["api_url", "token_id", "token_secret", "timeout"].forEach((name) => {
+            const input = document.querySelector(`[name="${name}"]`);
+            if (input) formData.append(name, input.value);
+        });
+        const verifyTls = document.querySelector('[name="verify_tls"]');
+        if (verifyTls?.checked) formData.append("verify_tls", "1");
+        {% if mode == 'edit' %}formData.append("check_id", {{ check.get('id', '')|tojson }});{% endif %}
+        try {
+            const response = await fetch({{ url_for('pbs_discover_targets')|tojson }}, {
+                method: "POST",
+                headers: {"X-CSRF-Token": {{ csrf_token()|tojson }}},
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+            const datastoreInput = document.querySelector('[name="datastore"]');
+            const namespaceInput = document.querySelector('[name="namespace"]');
+            const backupTypeInput = document.querySelector('[name="backup_type"]');
+            const backupIdInput = document.querySelector('[name="backup_id"]');
+            const jobTypeInput = document.querySelector('[name="job_type"]');
+            const jobIdInput = document.querySelector('[name="job_id"]');
+            const remoteInput = document.querySelector('[name="remote"]');
+            fillSelect("pbs-discovered-datastores", "Datastore auswählen …", data.datastores, (row) => row.name,
+                (row) => `${row.name}${row.used_percent !== null ? ` · ${row.used_percent} % belegt` : ""}`,
+                (row) => { datastoreInput.value = row.name; setPbsStatus(`Datastore „${row.name}“ wurde ausgewählt.`); updatePbsGuidance(); });
+            fillSelect("pbs-discovered-groups", "Backup-Gruppe auswählen …", data.groups, () => "",
+                (row) => `${row.backup_type}/${row.backup_id} · ${row.datastore}${row.namespace ? ` · ${row.namespace}` : ""}`,
+                (row) => {
+                    datastoreInput.value = row.datastore; namespaceInput.value = row.namespace || "";
+                    backupTypeInput.value = row.backup_type; backupIdInput.value = row.backup_id;
+                    setPbsStatus(`Backup-Gruppe „${row.backup_type}/${row.backup_id}“ wurde übernommen.`); updatePbsGuidance();
+                });
+            fillSelect("pbs-discovered-jobs", "PBS-Job auswählen …", data.jobs, () => "",
+                (row) => `${row.job_type.toUpperCase()} · ${row.job_id}${row.store ? ` · ${row.store}` : ""}`,
+                (row) => { jobTypeInput.value = row.job_type; jobIdInput.value = row.job_id; setPbsStatus(`PBS-Job „${row.job_id}“ wurde übernommen.`); });
+            fillSelect("pbs-discovered-remotes", "PBS-Remote auswählen …", data.remotes, () => "",
+                (row) => `${row.name}${row.host ? ` · ${row.host}` : ""}`,
+                (row) => { remoteInput.value = row.name; setPbsStatus(`PBS-Remote „${row.name}“ wurde übernommen.`); });
+            if (data.datastores.length === 1 && datastoreInput && !datastoreInput.value) datastoreInput.value = data.datastores[0].name;
+            setPbsStatus(`${data.datastores.length} Datastores, ${data.groups.length} Backup-Gruppen, ${data.jobs.length} Jobs und ${data.remotes.length} Remotes erkannt.`);
+            updatePbsGuidance();
+        } catch (error) {
+            setPbsStatus(`PBS-Erkennung fehlgeschlagen: ${error.message}`);
+        } finally {
+            pbsDiscoveryButtons.forEach((button) => { button.disabled = false; });
+        }
+    };
+    pbsDiscoveryButtons.forEach((button) => button.addEventListener("click", discoverPbsTargets));
+}
+
+const proxmoxModeHelp = {
+    node: {title:"Proxmox-Node prüfen", text:"Benötigt werden API-Daten und ein Node. LANaxy prüft Erreichbarkeit, Status und optional die Mindestlaufzeit."},
+    guest: {title:"VM oder LXC prüfen", text:"Benötigt werden API-Daten, Node sowie eine VM-/LXC-ID. Gasttyp und erwarteter Status werden berücksichtigt."},
+    storage: {title:"Proxmox-Storage prüfen", text:"Benötigt werden API-Daten, Node und Storage-ID. Die Belegung wird anhand der Grenzwerte bewertet."}
+};
+function fieldValue(name, fallback = "") {
+    const input = document.querySelector(`[name="${name}"]`);
+    return input ? String(input.value || "").trim() : fallback;
+}
+function updateProxmoxGuidance() {
+    const mode = fieldValue("mode", "node");
+    const help = proxmoxModeHelp[mode] || proxmoxModeHelp.node;
+    const title = document.getElementById("proxmox-mode-help-title");
+    const text = document.getElementById("proxmox-mode-help-text");
+    if (title) title.textContent = help.title;
+    if (text) text.textContent = help.text;
+    const node = fieldValue("node", "automatisch erkannt");
+    let target = `Node ${node}`;
+    if (mode === "guest") {
+        const guestType = fieldValue("guest_type", "lxc") === "qemu" ? "VM" : "LXC";
+        target = `${guestType} ${fieldValue("vmid", "noch nicht gewählt")} auf Node ${node}`;
+    } else if (mode === "storage") {
+        target = `Storage ${fieldValue("storage", "noch nicht gewählt")} auf Node ${node}`;
+    }
+    const summary = document.getElementById("proxmox-target-summary");
+    if (summary) summary.textContent = target;
+}
+const pbsModeHelp = {
+    server: {title:"PBS-Server prüfen", text:"LANaxy prüft Erreichbarkeit und Version des Proxmox Backup Servers. Weitere Zielbereiche werden für diesen Modus ausgeblendet."},
+    datastore: {title:"PBS-Datastore prüfen", text:"LANaxy überwacht die Belegung eines Datastores anhand der festgelegten Warning- und Critical-Grenzen."},
+    backup: {title:"PBS-Backup-Gruppe prüfen", text:"LANaxy prüft das Alter der letzten Sicherung einer VM, eines LXC-Containers oder Hosts innerhalb des gewählten Datastores."},
+    job: {title:"PBS-Job prüfen", text:"LANaxy überwacht einen Verify-, Prune-, Sync- oder Garbage-Collection-Job."},
+    remote: {title:"PBS-Remote prüfen", text:"LANaxy prüft, ob die ausgewählte PBS-Gegenstelle vorhanden und korrekt konfiguriert ist."}
+};
+function updatePbsGuidance() {
+    const mode = fieldValue("mode", "server");
+    const help = pbsModeHelp[mode] || pbsModeHelp.server;
+    const title = document.getElementById("pbs-mode-help-title");
+    const text = document.getElementById("pbs-mode-help-text");
+    if (title) title.textContent = help.title;
+    if (text) text.textContent = help.text;
+
+    const apiUrl = fieldValue("api_url", "Proxmox Backup Server");
+    const datastore = fieldValue("datastore", "noch nicht gewählt");
+    let target = `Server ${apiUrl}`;
+    if (mode === "datastore") {
+        target = `Datastore ${datastore} auf ${apiUrl}`;
+    } else if (mode === "backup") {
+        const backupType = fieldValue("backup_type", "Backup");
+        const backupId = fieldValue("backup_id", "noch nicht gewählt");
+        target = `${backupType}/${backupId} in Datastore ${datastore}`;
+    } else if (mode === "job") {
+        target = `${fieldValue("job_type", "PBS-Job").toUpperCase()} ${fieldValue("job_id", "noch nicht gewählt")}`;
+    } else if (mode === "remote") {
+        target = `Remote ${fieldValue("remote", "noch nicht gewählt")}`;
+    }
+    const summary = document.getElementById("pbs-target-summary");
+    if (summary) summary.textContent = target;
+}
+
+function updateModeSections() {
+    const modeInput = document.querySelector('[name="mode"]');
+    const mode = modeInput ? modeInput.value : '';
+    document.querySelectorAll('[data-mode-section]').forEach((section) => {
+        const modes = (section.dataset.modeSection || '').split('|').filter(Boolean);
+        const visible = !modes.length || modes.includes(mode);
+        section.hidden = !visible;
+        section.classList.toggle('is-hidden', !visible);
+    });
+}
+
+const modeInput = document.querySelector('[name="mode"]');
+if (modeInput) {
+    modeInput.addEventListener('change', () => {
+        updateModeSections();
+        updateConditionalFields();
+    });
+}
+
+document.querySelectorAll('[name="mode"], [name="node"], [name="guest_type"], [name="vmid"], [name="storage"], [name="api_url"], [name="datastore"], [name="backup_type"], [name="backup_id"], [name="job_type"], [name="job_id"], [name="remote"]').forEach((input) => {
+    input.addEventListener("input", () => { updateProxmoxGuidance(); updatePbsGuidance(); });
+    input.addEventListener("change", () => { updateProxmoxGuidance(); updatePbsGuidance(); });
+});
+updateModeSections();
+updateConditionalFields();
+updateProxmoxGuidance();
+updatePbsGuidance();
+</script>
+{% endblock %}

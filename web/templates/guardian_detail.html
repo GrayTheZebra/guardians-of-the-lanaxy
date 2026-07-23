@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <p class="eyebrow">{{ metadata.get('name',check.guardian) }}</p>
+        <h1>{{ check.name }}</h1>
+        <p>{{ state.get('message','Noch kein Ergebnis') }}</p>
+    </div>
+    <div class="heading-actions">
+        <button class="button" id="test">Testen</button>
+        <a class="button primary" href="{{ url_for('edit_guardian',check_id=check.id) }}">Bearbeiten</a>
+    </div>
+</section>
+
+{% if maintenance_active %}
+<div class="maintenance-banner" id="maintenance">
+    <strong>Wartungsmodus aktiv</strong>
+    <span>
+        {% if check.get('maintenance', {}).get('until') %}
+            bis {{ check.maintenance.until|replace('T',' ') }}
+        {% else %}
+            ohne festgelegtes Ende
+        {% endif %}
+    </span>
+    <form method="post" action="{{ url_for('maintenance_stop',check_id=check.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <button class="button" type="submit">Wartung beenden</button>
+    </form>
+</div>
+{% else %}
+<form class="maintenance-form" id="maintenance" method="post" action="{{ url_for('maintenance_start',check_id=check.id) }}">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <label>
+        <span>Wartung optional beenden am</span>
+        <input type="datetime-local" name="until">
+    </label>
+    <button class="button" type="submit">Wartungsmodus starten</button>
+</form>
+{% endif %}
+
+<section class="history-summary">
+    <article><strong>{{ state.get('status','unknown')|upper }}</strong><span>Status</span></article>
+    {% if check.guardian == 'package_updates' %}
+    <article><strong>{{ state.get('details', {}).get('updates', '—') }}</strong><span>Verfügbare Updates</span></article>
+    {% else %}
+    <article><strong>{{ state.get('uptime','—') }} %</strong><span>Verfügbarkeit</span></article>
+    {% endif %}
+    <article><strong data-lanaxy-datetime="{{ state.get('last_check','—') }}">{{ state.get('last_check','—') }}</strong><span>Letzte Prüfung</span></article>
+    <article><strong>{{ metadata.get('version','—') }}</strong><span>Version</span></article>
+</section>
+
+<div id="test-result" class="test-result" hidden></div>
+
+<section class="chart-card guardian-routing-card" id="notification-routing">
+    <div class="chart-heading">
+        <div>
+            <h2>Rule- und Beacon-Abhängigkeiten</h2>
+            <p>Benachrichtigungsweg dieses Guardians von der auslösenden Rule bis zu den angesprochenen Beacons.</p>
+        </div>
+        <div class="routing-detail-summary">
+            <span class="routing-overview-badge is-{{ 'error' if beacon_health.coverage_state == 'critical' else beacon_health.coverage_state }}">{{ beacon_health.coverage_message }}</span>
+            <span class="dependency-count">{{ notification_dependencies|length }} Rule{% if notification_dependencies|length != 1 %}s{% endif %}</span>
+        </div>
+    </div>
+
+    {% if notification_dependencies %}
+    <div class="guardian-routing-diagram" aria-label="Abhängigkeiten zwischen Guardian, Rules und Beacons">
+        <svg class="routing-connections" aria-hidden="true"></svg>
+        <div class="routing-guardian-column">
+            <article class="routing-node routing-guardian-node {{ 'is-disabled' if not check.get('enabled', true) }}" data-routing-node="guardian">
+                <span class="routing-node-kind">Guardian</span>
+                <strong>{{ check.name }}</strong>
+                <small>{{ check.id }}</small>
+                {% if not check.get('enabled', true) %}<span class="routing-state">deaktiviert</span>{% endif %}
+            </article>
+        </div>
+
+        <div class="routing-rules-column">
+        {% for dependency in notification_dependencies %}
+            <div class="routing-rule-branch" data-routing-branch="{{ loop.index }}">
+                <article class="routing-node routing-rule-node {{ 'is-disabled' if not dependency.enabled }}" data-routing-node="rule">
+                    <span class="routing-node-kind">Rule</span>
+                    <strong>{{ dependency.name }}</strong>
+                    <small>
+                        {{ dependency.statuses|join(', ') or 'keine Statusauswahl' }}
+                        {% if dependency.delay_seconds %} · +{{ dependency.delay_seconds }} s{% endif %}
+                    </small>
+                    {% if not dependency.enabled %}<span class="routing-state">deaktiviert</span>{% endif %}
+                    {% if dependency.id %}<a href="{{ url_for('notification_rule_form', rule_id=dependency.id) }}">Rule öffnen</a>{% endif %}
+                </article>
+
+                <div class="routing-beacon-list">
+                    {% for beacon in dependency.primary_beacons %}
+                    <article class="routing-node routing-beacon-node {{ 'is-missing' if beacon.missing else ('is-error' if beacon.last_error else ('is-muted' if beacon.muted else ('is-disabled' if not beacon.enabled else 'is-ok'))) }}" data-routing-node="beacon">
+                        <span class="routing-node-kind">Beacon</span>
+                        <strong>{{ beacon.name }}</strong>
+                        <small>{{ beacon.type }} · direkt{% if dependency.delay_seconds %} nach {{ dependency.delay_seconds }} s{% endif %}</small>
+                        {% if beacon.missing %}
+                            <span class="routing-state">nicht mehr vorhanden</span>
+                        {% elif beacon.last_error %}
+                            <span class="routing-state routing-state-error" title="{{ beacon.last_error }}">Fehler: {{ beacon.last_error }}</span>
+                        {% elif beacon.muted %}
+                            <span class="routing-state">stummgeschaltet</span>
+                        {% elif not beacon.enabled %}
+                            <span class="routing-state">deaktiviert</span>
+                        {% endif %}
+                    </article>
+                    {% endfor %}
+
+                    {% for escalation in dependency.escalation_groups %}
+                        {% for beacon in escalation.beacons %}
+                        <article class="routing-node routing-beacon-node escalation {{ 'is-missing' if beacon.missing else ('is-error' if beacon.last_error else ('is-muted' if beacon.muted else ('is-disabled' if not beacon.enabled else 'is-ok'))) }}" data-routing-node="beacon">
+                            <span class="routing-node-kind">Beacon · Eskalation {{ escalation.index }}</span>
+                            <strong>{{ beacon.name }}</strong>
+                            <small>{{ beacon.type }} · nach {{ escalation.after_minutes }} min{% if dependency.delay_seconds %} plus {{ dependency.delay_seconds }} s Grundverzögerung{% endif %}</small>
+                            {% if beacon.missing %}
+                                <span class="routing-state">nicht mehr vorhanden</span>
+                            {% elif beacon.last_error %}
+                                <span class="routing-state routing-state-error" title="{{ beacon.last_error }}">Fehler: {{ beacon.last_error }}</span>
+                            {% elif beacon.muted %}
+                                <span class="routing-state">stummgeschaltet</span>
+                            {% elif not beacon.enabled %}
+                                <span class="routing-state">deaktiviert</span>
+                            {% endif %}
+                        </article>
+                        {% endfor %}
+                    {% endfor %}
+
+                    {% if not dependency.primary_beacons and not dependency.escalation_groups %}
+                    <article class="routing-node routing-beacon-node is-missing" data-routing-node="beacon">
+                        <span class="routing-node-kind">Beacon</span>
+                        <strong>Keine Beacons zugeordnet</strong>
+                        <small>Diese Rule kann aktuell keine Benachrichtigung senden.</small>
+                    </article>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="routing-empty-state">
+        <strong>Keine passende Rule</strong>
+        <p>Dieser Guardian ist derzeit mit keiner Benachrichtigungs-Rule und damit mit keinem Beacon verbunden.</p>
+        <a class="button" href="{{ url_for('notification_rule_form') }}">Rule anlegen</a>
+    </div>
+    {% endif %}
+</section>
+
+<script>
+(() => {
+    const diagram = document.querySelector('.guardian-routing-diagram');
+    if (!diagram) return;
+    const svg = diagram.querySelector('.routing-connections');
+    const guardian = diagram.querySelector('[data-routing-node="guardian"]');
+    const ns = 'http://www.w3.org/2000/svg';
+
+    function anchor(element, side, bounds) {
+        const rect = element.getBoundingClientRect();
+        return {
+            x: (side === 'left' ? rect.left : rect.right) - bounds.left,
+            y: rect.top + rect.height / 2 - bounds.top
+        };
+    }
+
+    function appendCurve(from, to, classes) {
+        const path = document.createElementNS(ns, 'path');
+        const distance = Math.max(1, to.x - from.x);
+        const corridor = Math.min(72, Math.max(48, distance * 0.34));
+        path.setAttribute(
+            'd',
+            `M ${from.x} ${from.y} C ${from.x + corridor} ${from.y}, ${to.x - corridor} ${to.y}, ${to.x} ${to.y}`
+        );
+        path.setAttribute('class', classes);
+        svg.appendChild(path);
+    }
+
+    function drawConnections() {
+        const mobile = window.matchMedia('(max-width: 900px)').matches;
+        svg.replaceChildren();
+        if (mobile || !guardian) return;
+
+        const bounds = diagram.getBoundingClientRect();
+        svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
+        svg.setAttribute('width', bounds.width);
+        svg.setAttribute('height', bounds.height);
+
+        diagram.querySelectorAll('[data-routing-branch]').forEach((branch, index) => {
+            const rule = branch.querySelector('[data-routing-node="rule"]');
+            if (!rule) return;
+            const branchClass = `branch-${index % 4}`;
+            appendCurve(anchor(guardian, 'right', bounds), anchor(rule, 'left', bounds), `routing-curve guardian-rule ${branchClass}`);
+            branch.querySelectorAll('[data-routing-node="beacon"]').forEach((beacon) => {
+                appendCurve(anchor(rule, 'right', bounds), anchor(beacon, 'left', bounds), `routing-curve rule-beacon ${branchClass}`);
+            });
+        });
+    }
+
+    let frame = 0;
+    const scheduleDraw = () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(drawConnections);
+    };
+    new ResizeObserver(scheduleDraw).observe(diagram);
+    window.addEventListener('resize', scheduleDraw, {passive: true});
+    document.fonts?.ready.then(scheduleDraw);
+    scheduleDraw();
+})();
+</script>
+
+{% if check.guardian == 'package_updates' %}
+<section class="chart-card update-package-card">
+    <div class="chart-heading">
+        <div>
+            <h2>Verfügbare Updates</h2>
+            <p>{{ state.get('details', {}).get('package_manager', 'Paketmanager')|upper }} · {{ state.get('details', {}).get('updates', 0) }} Pakete{% if state.get('details', {}).get('reboot_required') %} · Neustart erforderlich{% endif %}</p>
+        </div>
+    </div>
+    {% set packages = state.get('details', {}).get('packages', []) %}
+    {% if packages %}
+    <div class="table-scroll">
+        <table class="protocol-table update-package-table">
+            <thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th></tr></thead>
+            <tbody>
+            {% for package in packages %}
+                <tr><td><code>{{ package.get('name', '—') }}</code></td><td>{{ package.get('current') or '—' }}</td><td>{{ package.get('target') or '—' }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Keine Paketliste vorhanden. Der MiniGuard muss mit dieser LANaxy-Version aktualisiert und anschließend erneut geprüft werden.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+
+{% if check.guardian == 'smart' and smart_history %}
+<section class="chart-card">
+    <div class="chart-heading"><div><h2>SMART-Verlauf</h2><p>Letzte {{ smart_history|length }} Messpunkte</p></div></div>
+    <div class="smart-history-chart" id="smart-history-chart"></div>
+</section>
+<script>
+(() => {
+ const points={{ smart_history|tojson }}; const keys=["temperature_c","reallocated_sectors","pending_sectors","percentage_used"];
+ const available=keys.filter(key=>points.some(p=>p.metrics && p.metrics[key]!==undefined));
+ const target=document.getElementById("smart-history-chart");
+ if(!available.length){target.textContent="Keine darstellbaren SMART-Werte.";return;}
+ available.forEach(key=>{const row=document.createElement("div");row.className="smart-history-row";const values=points.map(p=>p.metrics?.[key]).filter(v=>typeof v==="number");const max=Math.max(...values,1);row.innerHTML=`<strong>${key}</strong><div class="smart-sparkline"></div><span>${values.at(-1) ?? '—'}</span>`;const spark=row.querySelector('.smart-sparkline');values.forEach(v=>{const bar=document.createElement('i');bar.style.height=`${Math.max(4,v/max*100)}%`;spark.appendChild(bar)});target.appendChild(row)});
+})();
+</script>
+{% endif %}
+
+<section class="system-grid">
+    <article class="chart-card">
+        <h2>Konfiguration</h2>
+        <dl class="system-facts">
+            <div><dt>Guardian-ID</dt><dd>{{ check.id }}</dd></div>
+            <div><dt>Gruppe</dt><dd>{{ check.get('group','Ohne Gruppe') }}</dd></div>
+            <div><dt>Abhängigkeiten</dt><dd>{{ check.get('depends_on',[])|join(', ') or 'Keine' }}</dd></div>
+            <div><dt>Typ</dt><dd>{{ check.guardian }}</dd></div>
+            <div><dt>Letzter Fehler</dt><dd>{{ state.get('last_error','—') }}</dd></div>
+            <div><dt>Letzte Wiederherstellung</dt><dd>{{ state.get('last_recovery','—') }}</dd></div>
+        </dl>
+    </article>
+
+    <article class="chart-card">
+        <h2>Letzte Protokolleinträge</h2>
+        <div class="detail-events">
+        {% for e in events %}
+            <div>
+                <span class="log-level level-{{ e.level }}">{{ e.status or e.event_type }}</span>
+                <strong>{{ e.message }}</strong>
+                <small>{{ e.timestamp|replace('T',' ') }}</small>
+            </div>
+        {% else %}
+            <p>Keine Protokolleinträge vorhanden.</p>
+        {% endfor %}
+        </div>
+    </article>
+</section>
+
+<script>
+document.getElementById("test").onclick=async()=>{
+    const output=document.getElementById("test-result");
+    try{
+        const response=await fetch({{ url_for('test_guardian',check_id=check.id)|tojson }},{
+            method:"POST",
+            headers:{"Content-Type":"application/x-www-form-urlencoded"},
+            body:new URLSearchParams({"_csrf_token":{{ csrf_token()|tojson }}})
+        });
+        const data=await response.json();
+        output.hidden=false;
+        const result=data.result||{};
+        const status=String(result.status||"").toUpperCase();
+        const responseTime=result.response_time;
+        const resultMessage=result.message||"";
+        const hasResultMessage=Boolean(resultMessage);
+        output.className="test-result "+(data.ok?"success":"error");
+        if(hasResultMessage){
+            const timing=(responseTime===undefined||responseTime===null||responseTime==="")
+                ? ""
+                : ` (${responseTime} ms)`;
+            output.textContent=`${status||"ERGEBNIS"}: ${resultMessage}${timing}`;
+            if(result.details && Object.keys(result.details).length){
+                const details=document.createElement("details");
+                const summary=document.createElement("summary"); summary.textContent="Technische Details";
+                const pre=document.createElement("pre"); pre.textContent=JSON.stringify(result.details,null,2);
+                details.append(summary,pre); output.appendChild(details);
+            }
+        }else{
+            output.textContent=data.error||"Test fehlgeschlagen";
+        }
+    }catch(error){
+        output.hidden=false;
+        output.className="test-result error";
+        output.textContent=error.message;
+    }
+};
+</script>
+{% endblock %}

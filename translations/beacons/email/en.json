@@ -1,0 +1,38 @@
+{
+  "name": "Email",
+  "description": "Sends notifications through an SMTP server.",
+  "category": "Messaging",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "smtp_host": {
+      "label": "SMTP server"
+    },
+    "smtp_port": {
+      "label": "SMTP port"
+    },
+    "encryption": {
+      "label": "Encryption"
+    },
+    "username": {
+      "label": "Username"
+    },
+    "password": {
+      "label": "Password"
+    },
+    "sender": {
+      "label": "Sender"
+    },
+    "recipients": {
+      "label": "Recipients",
+      "help": "Separate multiple addresses with commas."
+    },
+    "subject_prefix": {
+      "label": "Subject prefix"
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    }
+  }
+}

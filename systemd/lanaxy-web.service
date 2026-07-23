@@ -1,0 +1,46 @@
+[Unit]
+Description=Guardians of the LANaxy Web UI (Gunicorn WSGI)
+Documentation=https://github.com/GrayTheZebra/guardians-of-the-lanaxy
+After=network-online.target lanaxy.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lanlord
+Group=lanlord
+WorkingDirectory=/opt/guardians-of-the-lanaxy
+ExecStart=/usr/bin/python3 -m gunicorn --config web/gunicorn.conf.py web.run:app
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGTERM
+TimeoutStopSec=40
+
+Restart=always
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+RemoveIPC=true
+
+RuntimeDirectory=lanaxy
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+ReadWritePaths=/etc/lanaxy /var/lib/lanaxy /var/log/lanaxy /run/lanaxy
+
+[Install]
+WantedBy=multi-user.target

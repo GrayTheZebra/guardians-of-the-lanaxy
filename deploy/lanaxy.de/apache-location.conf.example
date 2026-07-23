@@ -1,0 +1,8 @@
+# In den TLS-VirtualHost für lanaxy.de einfügen.
+Alias /install.sh /var/www/lanaxy/install.sh
+<Location "/install.sh">
+    ForceType text/plain
+    Header set Cache-Control "public, max-age=300"
+    Header set X-Content-Type-Options "nosniff"
+    Require all granted
+</Location>

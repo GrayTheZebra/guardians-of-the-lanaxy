@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="breadcrumbs">
+    <a href="{{ url_for('beacons_page') }}">{{ t('nav.beacons') }}</a>
+    <span>›</span>
+    <span>{{ schema.name }}</span>
+</nav>
+<section class="dashboard-heading">
+    <div>
+        <h1>
+            {{ t('beacons.form_edit', name=schema.name) if mode == 'edit'
+               else t('beacons.form_add', name=schema.name) }}
+        </h1>
+        <p>{{ schema.description }}</p>
+    </div>
+</section>
+
+<form method="post" class="config-form" id="notification-channel-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" id="channel-id" name="_channel_id" value="{{ channel.get('id', '') }}">
+    <div class="form-grid">
+    {% for key, field in schema.schema.items() %}
+        {% set current = channel.get(key, field.get('default', '')) %}
+        {% if field.type == 'checkbox' %}
+            <label class="field field-checkbox">
+                <span class="toggle-row">
+                    <input type="checkbox" name="{{ key }}" value="1" {% if current %}checked{% endif %}>
+                    <span>{{ field.label }}{% if field.required %} *{% endif %}</span>
+                </span>
+                {% if field.help %}<small class="field-hint">{{ field.help }}</small>{% endif %}
+            </label>
+        {% else %}
+            <label class="field">
+                <span>{{ field.label }}{% if field.required %} *{% endif %}</span>
+                {% if field.type == 'select' %}
+                    <select name="{{ key }}">
+                        {% for option in field.options %}
+                            <option value="{{ option }}" {% if current|string == option|string %}selected{% endif %}>
+                                {{ field.get('option_labels', {}).get(option|string, option) }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                {% elif field.type == 'textarea' %}
+                    <textarea name="{{ key }}" rows="6">{{ current }}</textarea>
+                {% else %}
+                    {% set value = secret_placeholder if field.secret and current else current %}
+                    <input type="{{ 'text' if field.type == 'url' else field.type }}" name="{{ key }}" value="{{ value }}" {% if field.required %}required{% endif %}>
+                {% endif %}
+                {% if field.help %}<small class="field-hint">{{ field.help }}</small>{% endif %}
+            </label>
+        {% endif %}
+    {% endfor %}
+    </div>
+
+
+    {% if channel_type == 'webhook' %}
+    <section class="webhook-payload-examples">
+        <div class="section-heading-compact">
+            <div>
+                <p class="eyebrow">Gesendete Daten</p>
+                <h2>Beispiel für den JSON-Body</h2>
+                <p>LANaxy sendet den Body unverändert als <code>application/json</code>. Je nach Ereignis können zusätzliche Details und Incident-Daten enthalten sein.</p>
+            </div>
+        </div>
+        <details open>
+            <summary>Warnung oder kritischer Fehler</summary>
+            <pre><code>{
+  "type": "STATUS_CHANGED",
+  "source": "proxmox_api_guardian_1",
+  "device_id": "proxmox_api_guardian_1",
+  "old_status": "ok",
+  "new_status": "warning",
+  "level": 1,
+  "message": "Proxmox API: Node nicht erreichbar",
+  "timestamp": "2026-07-20T20:15:00",
+  "kind": "warning",
+  "title": "LANaxy-Warnung",
+  "rule_id": "default_1",
+  "rule_name": "Default",
+  "details": {
+    "response_ms": 15000
+  }
+}</code></pre>
+        </details>
+        <details>
+            <summary>Testnachricht</summary>
+            <pre><code>{
+  "kind": "test",
+  "title": "LANaxy Beacon-Test",
+  "message": "Der Beacon wurde erfolgreich getestet.",
+  "timestamp": "2026-07-20T20:15:00",
+  "source": "Webhook",
+  "beacon_type": "webhook",
+  "new_status": "ok",
+  "level": 0
+}</code></pre>
+        </details>
+        <div class="webhook-header-example">
+            <strong>Automatisch gesetzte Header</strong>
+            <code>Content-Type: application/json</code>
+            <code>User-Agent: LANaxy/1.1</code>
+            <small>Bei eingetragenem Bearer-Token zusätzlich: <code>Authorization: Bearer …</code></small>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if channel_type == 'get_webhook' %}
+    <section class="webhook-payload-examples">
+        <div class="section-heading-compact">
+            <div>
+                <p class="eyebrow">Gesendete Daten</p>
+                <h2>Reduzierte GET-Anfrage</h2>
+                <p>LANaxy sendet keinen JSON-Body. Die frei editierbare Query wird an die Zieladresse angehängt; Platzhalterwerte werden automatisch URL-kodiert.</p>
+            </div>
+        </div>
+        <details open>
+            <summary>Beispieladresse</summary>
+            <pre><code>Query:
+status={status}&amp;guardian={guardien}&amp;message={text}&amp;timestamp={date}&amp;action=red_on
+
+Ergebnis:
+https://ziel.local/hook?status=warning&amp;guardian=proxmox_api_guardian_1&amp;message=Node+nicht+erreichbar&amp;timestamp=2026-07-20T20%3A15%3A00&amp;action=red_on</code></pre>
+        </details>
+        <div class="webhook-header-example">
+            <strong>Verfügbare Platzhalter</strong>
+            <code>{status}</code>
+            <code>{guardian} / {guardien}</code>
+            <code>{message} / {text}</code>
+            <code>{timestamp} / {date}</code>
+            <code>{title}</code>
+            <code>{kind}</code>
+            <small>Feste Parameter wie <code>action=red_on</code> können beliebig ergänzt werden. Ein Bearer-Token wird ausschließlich im Authorization-Header übertragen.</small>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if channel_type == 'telegram' %}
+    <section class="telegram-discovery">
+        <div>
+            <h2>Chat automatisch ermitteln</h2>
+            <p>
+                Sende dem Bot in Telegram zuerst <code>/start</code> oder eine
+                beliebige Nachricht. LANaxy sucht anschließend nach verfügbaren Chats.
+            </p>
+        </div>
+        <button class="button" id="telegram-discover-button" type="button">
+            Chats suchen
+        </button>
+        <div id="telegram-discovery-result" class="telegram-discovery-result" hidden></div>
+    </section>
+    {% endif %}
+
+    <label class="toggle-row">
+        <input type="checkbox" name="enabled" value="1" {% if channel.get('enabled', true) %}checked{% endif %}>
+        {{ t('beacons.enabled') }}
+    </label>
+    <div class="form-actions">
+        <button
+            class="button beacon-live-test"
+            id="beacon-live-test"
+            type="button"
+        >
+            {{ t('beacons.test_before_save') }}
+        </button>
+        <button class="button primary" type="submit">{{ t('common.save') }}</button>
+        <a class="button" href="{{ url_for('beacons_page') }}">{{ t('common.cancel') }}</a>
+    </div>
+</form>
+
+
+<script>
+const beaconForm = document.getElementById("notification-channel-form");
+const liveTestButton = document.getElementById("beacon-live-test");
+
+liveTestButton?.addEventListener("click", async () => {
+    if (!beaconForm.reportValidity()) {
+        window.showToast(
+            {{ t('beacons.validation_failed')|tojson }},
+            "error"
+        );
+        return;
+    }
+
+    const originalText = liveTestButton.textContent;
+    liveTestButton.disabled = true;
+    liveTestButton.textContent = {{ t('common.loading')|tojson }};
+
+    try {
+        const response = await fetch(
+            {{ url_for('notification_channel_live_test', channel_type=channel_type)|tojson }},
+            {
+                method: "POST",
+                body: new FormData(beaconForm),
+            }
+        );
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "Unknown error");
+        }
+
+        window.showToast(
+            data.message,
+            "success",
+            {{ t('beacons.test_duration', duration='__DURATION__')|tojson }}
+                .replace("__DURATION__", data.duration_ms)
+        );
+    } catch (error) {
+        window.showToast(
+            {{ t('beacons.test_failed', error='__ERROR__')|tojson }}
+                .replace("__ERROR__", error.message),
+            "error"
+        );
+    } finally {
+        liveTestButton.disabled = false;
+        liveTestButton.textContent = originalText;
+    }
+});
+</script>
+
+{% if channel_type == 'telegram' %}
+<script>
+const discoverButton = document.getElementById("telegram-discover-button");
+const discoveryResult = document.getElementById("telegram-discovery-result");
+const botTokenInput = document.querySelector('[name="bot_token"]');
+const chatIdInput = document.querySelector('[name="chat_id"]');
+const channelIdInput = document.getElementById("channel-id");
+
+if (!discoverButton || !discoveryResult || !botTokenInput || !chatIdInput) {
+    console.error("Telegram-Erkennung konnte nicht initialisiert werden.");
+} else {
+discoverButton.addEventListener("click", async () => {
+    discoverButton.disabled = true;
+    discoverButton.textContent = {{ t('beacons.chat_search_running')|tojson }};
+    discoveryResult.hidden = false;
+    discoveryResult.className = "telegram-discovery-result";
+    discoveryResult.textContent = "Telegram wird abgefragt.";
+
+    try {
+        const body = new URLSearchParams({
+            "_csrf_token": {{ csrf_token()|tojson }},
+            "bot_token": botTokenInput.value,
+            "channel_id": channelIdInput.value,
+        });
+
+        const response = await fetch(
+            {{ url_for('telegram_discover')|tojson }},
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body,
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || data.ok === false) {
+            throw new Error(data.error || "Telegram-Abfrage fehlgeschlagen.");
+        }
+
+        discoveryResult.innerHTML = "";
+
+        if (data.webhook_active) {
+            discoveryResult.className = "telegram-discovery-result warning";
+            discoveryResult.innerHTML = `
+                <strong>Webhook aktiv</strong>
+                <p>${data.message}</p>
+                <small>Webhook: ${data.webhook_url}</small>
+            `;
+            return;
+        }
+
+        if (!data.chats.length) {
+            discoveryResult.className = "telegram-discovery-result warning";
+            discoveryResult.innerHTML = `
+                <strong>Keine Chats gefunden</strong>
+                <p>${data.message}</p>
+            `;
+            return;
+        }
+
+        discoveryResult.className = "telegram-discovery-result success";
+        const heading = document.createElement("strong");
+        heading.textContent = `${data.chats.length} Chat(s) gefunden`;
+        discoveryResult.appendChild(heading);
+
+        const list = document.createElement("div");
+        list.className = "telegram-chat-list";
+
+        data.chats.forEach(chat => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "telegram-chat-option";
+            button.innerHTML = `
+                <span>
+                    <strong>${chat.title}</strong>
+                    <small>${chat.type}${chat.username ? ` · @${chat.username}` : ""}</small>
+                </span>
+                <code>${chat.id}</code>
+            `;
+            button.addEventListener("click", () => {
+                chatIdInput.value = chat.id;
+                document.querySelectorAll(".telegram-chat-option")
+                    .forEach(item => item.classList.remove("selected"));
+                button.classList.add("selected");
+            });
+            list.appendChild(button);
+        });
+
+        discoveryResult.appendChild(list);
+    } catch (error) {
+        discoveryResult.className = "telegram-discovery-result error";
+        discoveryResult.textContent = error.message;
+    } finally {
+        discoverButton.disabled = false;
+        discoverButton.textContent = "Chats suchen";
+    }
+});
+}
+</script>
+{% endif %}
+{% endblock %}

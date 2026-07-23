@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="breadcrumbs"><a href="{{ url_for('portals_page') }}">Portals</a><span>›</span><span>{{ schema.name }}</span></nav>
+<section class="dashboard-heading"><div><h1>{{ schema.name }} Portal {{ 'bearbeiten' if mode=='edit' else 'hinzufügen' }}</h1><p>{{ schema.description }}</p></div></section>
+<form method="post" class="config-form">
+ <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+ <div class="form-grid">
+ {% for key,field in schema.schema.items() %}
+  {% set current=portal.get(key,field.get('default','')) %}
+  {% if field.type=='command_checkboxes' %}
+   {% set all_commands = current == '*' %}
+   {% set selected_commands = current.split(',') if current and current != '*' else [] %}
+   <fieldset class="field portal-command-field">
+    <legend>{{ field.label }}{% if field.required %} *{% endif %}</legend>
+    <p class="field-hint">Wähle, welche Runtime-Befehle dieses Portal an LANaxy übergeben darf.</p>
+    <label class="portal-command-all">
+     <input type="checkbox" name="{{ key }}__all" value="1" data-command-all="{{ key }}" {% if all_commands %}checked{% endif %}>
+     <span><strong>Alle Befehle erlauben</strong><small>Entspricht dem bisherigen Wert <code>*</code> und schließt auch künftig ergänzte Befehle ein.</small></span>
+    </label>
+    <div class="portal-command-grid" data-command-list="{{ key }}">
+     {% for command,info in control_commands.items() %}
+      <label class="portal-command-option">
+       <input type="checkbox" name="{{ key }}" value="{{ command }}" {% if all_commands or command in selected_commands %}checked{% endif %}>
+       <span class="portal-command-copy">
+        <span class="portal-command-title"><code>{{ command }}</code><strong>{{ info.label }}</strong></span>
+        <small>{{ info.description }}</small>
+        <small class="portal-command-parameters">{{ info.parameters }}</small>
+       </span>
+      </label>
+     {% endfor %}
+    </div>
+    {% if field.help %}<small class="field-hint">{{ field.help }}</small>{% endif %}
+   </fieldset>
+  {% else %}
+   <label class="field"><span>{{ field.label }}{% if field.required %} *{% endif %}</span>
+   {% if field.type=='checkbox' %}<input type="checkbox" name="{{ key }}" value="1" {% if current %}checked{% endif %}>
+   {% elif field.type=='textarea' %}<textarea name="{{ key }}">{{ current }}</textarea>
+   {% elif field.type=='generated_secret' %}<input type="password" name="{{ key }}" value="{{ secret_placeholder if current else '' }}" placeholder="Leer lassen: sicher automatisch erzeugen">
+   {% else %}{% set value=secret_placeholder if field.secret and current else current %}<input type="{{ 'password' if field.secret else field.type }}" name="{{ key }}" value="{{ value }}" {% if field.required %}required{% endif %}>{% endif %}
+   {% if field.help %}<small class="field-hint">{{ field.help }}</small>{% endif %}</label>
+  {% endif %}
+ {% endfor %}
+ </div>
+ {% set example_guardian = checks|first %}
+ {% if portal_type in ['webhook','cli','telegram_bot','discord_bot'] %}
+ <section class="portal-examples">
+  <div class="portal-examples__header"><div><span class="eyebrow">BEISPIELE</span><h2>LANaxy steuern</h2><p>Die Beispiele verwenden{% if example_guardian %} den Guardian <strong>{{ example_guardian.name }}</strong>{% else %} einen Platzhalter für die Guardian-ID{% endif %}.</p></div></div>
+  {% set guardian_id = example_guardian.id if example_guardian else 'GUARDIAN_ID' %}
+  {% if portal_type == 'webhook' %}
+   {% set visible_secret = one_time_credentials.get('webhook_secret') if one_time_credentials else '' %}
+   <div class="portal-credential-note {{ 'is-visible' if visible_secret else '' }}">
+    <strong>{{ 'Webhook-Schlüssel – nur jetzt vollständig sichtbar' if visible_secret else 'Webhook-Schlüssel geschützt' }}</strong>
+    <span>{{ visible_secret or 'Setze im Feld oben einen neuen Schlüssel, falls du ihn nicht mehr kennst.' }}</span>
+   </div>
+   <div class="portal-example-card"><h3>Guardian sofort prüfen</h3><code class="portal-example-code">curl -fsS -X POST '{{ base_url }}/api/control/webhook/{{ portal.id or 'PORTAL_ID' }}/{{ visible_secret or 'WEBHOOK-SCHLÜSSEL' }}' \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"run_guardian","target":"{{ guardian_id }}"}'</code></div>
+  {% elif portal_type == 'cli' %}
+   {% set visible_token = one_time_credentials.get('access_token') if one_time_credentials else '' %}
+   <div class="portal-credential-note {{ 'is-visible' if visible_token else '' }}">
+    <strong>{{ 'CLI-Token – nur jetzt vollständig sichtbar' if visible_token else 'CLI-Token geschützt' }}</strong>
+    <span>{{ visible_token or 'Setze im Feld oben einen neuen Token, falls du ihn nicht mehr kennst.' }}</span>
+   </div>
+   <div class="portal-example-card"><h3>Guardian sofort prüfen</h3><code class="portal-example-code">curl -fsS -X POST '{{ base_url }}/api/control/cli/{{ portal.id or 'PORTAL_ID' }}' \
+  -H 'Authorization: Bearer {{ visible_token or 'CLI-ZUGRIFFSTOKEN' }}' \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"run_guardian","target":"{{ guardian_id }}"}'</code></div>
+  {% elif portal_type == 'telegram_bot' %}
+   <div class="portal-example-card"><h3>Guardian sofort prüfen</h3><code class="portal-example-code">/run {{ guardian_id }}</code><p>Weitere Beispiele: <code>/status {{ guardian_id }}</code>, <code>/maintenance {{ guardian_id }} 60</code> und <code>/help</code>.</p></div>
+  {% elif portal_type == 'discord_bot' %}
+   {% set prefix = portal.get('command_prefix', schema.schema.command_prefix.default) %}
+   <div class="portal-example-card"><h3>Guardian sofort prüfen</h3><code class="portal-example-code">{{ prefix }} run {{ guardian_id }}</code><p>Weitere Beispiele: <code>{{ prefix }} status {{ guardian_id }}</code>, <code>{{ prefix }} maintenance {{ guardian_id }} 60</code> und <code>{{ prefix }} help</code>.</p></div>
+  {% endif %}
+ </section>
+ {% endif %}
+ <label class="toggle-row"><input type="checkbox" name="enabled" value="1" {% if portal.get('enabled',true) %}checked{% endif %}>Portal aktiv</label>
+ <div class="form-actions"><button class="button primary">Speichern</button><a class="button" href="{{ url_for('portals_page') }}">Abbrechen</a></div>
+</form>
+<script>
+document.querySelectorAll('[data-command-all]').forEach((allBox) => {
+ const key = allBox.dataset.commandAll;
+ const boxes = Array.from(document.querySelectorAll(`[data-command-list="${key}"] input[type="checkbox"]`));
+ const sync = () => {
+  boxes.forEach((box) => {
+   box.checked = allBox.checked || box.checked;
+   box.disabled = allBox.checked;
+  });
+ };
+ allBox.addEventListener('change', sync);
+ sync();
+});
+</script>
+{% endblock %}

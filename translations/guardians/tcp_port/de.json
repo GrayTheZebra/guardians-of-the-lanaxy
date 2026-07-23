@@ -1,0 +1,30 @@
+{
+  "name": "TCP Port Guardian",
+  "description": "Prüft, ob ein TCP-Port erreichbar ist.",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "id": {
+      "label": "Guardian-ID"
+    },
+    "device_id": {
+      "label": "Geräte-ID"
+    },
+    "interval": {
+      "label": "Intervall (Sekunden)"
+    },
+    "timeout": {
+      "label": "Timeout (Sekunden)"
+    },
+    "retries": {
+      "label": "Fehlversuche bis Critical"
+    },
+    "host": {
+      "label": "Host oder IP"
+    },
+    "port": {
+      "label": "Port"
+    }
+  }
+}

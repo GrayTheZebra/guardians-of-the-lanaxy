@@ -1,0 +1,19 @@
+{
+  "name": "Telegram",
+  "description": "Sends notifications through a Telegram bot.",
+  "category": "Messenger",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "bot_token": {
+      "label": "Bot token"
+    },
+    "chat_id": {
+      "label": "Chat ID"
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    }
+  }
+}

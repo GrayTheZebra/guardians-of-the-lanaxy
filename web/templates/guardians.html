@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% block title %}Guardians · {{ app_name }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="{{ url_for('guardian_management') }}">Guardians</a></nav>
+
+<section class="dashboard-heading">
+    <div>
+        <h1>Guardians</h1>
+        <p>Aktive Überwachungen und ihre aktuellen Zustände</p>
+    </div>
+    <div class="guardian-toolbar">
+        <div class="guardian-toolbar-row guardian-toolbar-filters">
+            <input id="guardian-search" class="group-filter" type="search" placeholder="Guardians durchsuchen …">
+            <select id="guardian-tag-filter" class="group-filter"><option value="">Alle Tags</option>{% for tag in tags %}<option value="{{ tag }}">{{ tag }}</option>{% endfor %}</select>
+            <select id="guardian-status-filter" class="group-filter"><option value="">Alle Status</option><option value="ok">OK</option><option value="warning">Warning</option><option value="critical">Critical</option><option value="blocked">Blocked</option><option value="pending">Pending</option><option value="disabled">Deaktiviert</option></select>
+            <select id="guardian-sort" class="group-filter"><option value="name">Name</option><option value="status">Status</option><option value="last_check">Letzte Prüfung</option><option value="response_time">Antwortzeit</option></select>
+            <select id="guardian-group-filter" class="group-filter"><option value="">Alle Gruppen</option>{% for group in groups %}<option value="{{ group }}">{{ group }}</option>{% endfor %}</select>
+        </div>
+        <div class="guardian-toolbar-row guardian-toolbar-actions">
+            <a class="button" href="{{ url_for('guardian_types') }}">Guardian-Typen</a>
+            <div class="assistant-dropdown card-menu">
+                <button class="button kebab-trigger" type="button" aria-expanded="false">Assistenten</button>
+                <div class="card-menu-panel assistant-menu" hidden>
+                    <a href="{{ url_for('ai_assistant') }}">KI-Assistent</a>
+                    <a href="{{ url_for('proxmox_assistant') }}">Proxmox-Assistent</a>
+                    <a href="{{ url_for('pbs_assistant') }}">PBS-Assistent</a>
+                </div>
+            </div>
+            <button class="button" type="button" id="export-selected-guardians" title="Tokens, Passwörter und andere Zugangsdaten werden aus Sicherheitsgründen nicht mit exportiert." aria-label="Guardians exportieren. Tokens und Zugangsdaten werden nicht mit exportiert.">Exportieren</button>
+            <button class="button" type="button" id="open-guardian-import">Importieren</button>
+            <form id="guardian-import-form" method="post" action="{{ url_for('guardian_import') }}" enctype="multipart/form-data" hidden><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="file" name="file" accept="application/json,.json"></form>
+            <div class="add-guardian-dropdown card-menu">
+                <button class="button kebab-trigger" type="button" aria-expanded="false">Direkt hinzufügen</button>
+                <div class="card-menu-panel guardian-type-menu" hidden>
+                    {% for category in direct_add_groups %}<div class="guardian-type-menu-group"><div class="guardian-type-menu-heading">{{ category.label }}</div>{% for guardian in category["items"] %}<a href="{{ url_for('add_guardian', type=guardian.module) }}">{{ guardian.name }}</a>{% endfor %}</div>{% endfor %}
+                </div>
+            </div>
+            <a class="button primary" href="{{ url_for('launchpad_start') }}">Launchpad starten</a>
+        </div>
+    </div>
+</section>
+
+<section class="summary-grid">
+    {% set enabled = guardians|selectattr('check.enabled', 'undefined')|list %}
+    <article class="summary-card">
+        <span class="summary-icon shield"><svg><use href="#icon-shield"/></svg></span>
+        <div><strong>{{ guardian_count }}</strong><span>Guardian-Instanzen</span></div>
+    </article>
+    <article class="summary-card">
+        <span class="summary-icon ok"><svg><use href="#icon-check"/></svg></span>
+        <div>
+            <strong>{{ ok_count }}</strong>
+            <span>Ohne Problem</span>
+        </div>
+    </article>
+    <article class="summary-card">
+        <span class="summary-icon warning"><svg><use href="#icon-warning"/></svg></span>
+        <div>
+            <strong>{{ warning_count }}</strong>
+            <span>Warnungen</span>
+        </div>
+    </article>
+    <article class="summary-card">
+        <span class="summary-icon critical"><svg><use href="#icon-critical"/></svg></span>
+        <div>
+            <strong>{{ critical_count }}</strong>
+            <span>Probleme</span>
+        </div>
+    </article>
+</section>
+
+<form method="post" action="{{ url_for('guardian_bulk') }}" id="guardian-bulk-form">
+<input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+<div class="bulk-selection-row">
+  <label><input type="checkbox" id="select-all-guardians"> Alle sichtbaren auswählen</label>
+  <span id="guardian-selection-count">0 ausgewählt</span>
+</div>
+<div class="bulk-toolbar" id="guardian-bulk-toolbar" hidden>
+  <div class="bulk-toolbar-main">
+    <select name="action" id="guardian-bulk-action" required>
+      <option value="">Massenaktion …</option><option value="enable">Aktivieren</option><option value="disable">Deaktivieren</option>
+      <option value="test">Jetzt prüfen</option><option value="duplicate">Duplizieren</option>
+      <option value="group">Gruppe setzen</option><option value="tags">Tags setzen</option><option value="settings">Intervalle/Quelle ändern</option><option value="dependencies">Abhängigkeiten setzen</option><option value="delete">Löschen</option>
+    </select>
+    <button class="button primary" type="submit">Anwenden</button>
+  </div>
+  <div class="bulk-field-grid">
+    <input data-bulk-for="group" name="bulk_group" placeholder="Gruppe" hidden disabled>
+    <input data-bulk-for="tags" name="bulk_tags" placeholder="Tags, mit Komma" hidden disabled>
+    <input data-bulk-for="settings" type="number" name="bulk_interval" placeholder="Intervall (Sekunden)" hidden disabled>
+    <input data-bulk-for="settings" type="number" name="bulk_timeout" placeholder="Timeout (Sekunden)" hidden disabled>
+    <input data-bulk-for="settings" type="number" name="bulk_retries" placeholder="Retries" hidden disabled>
+    <select data-bulk-for="settings" name="bulk_execution_source" hidden disabled><option value="">Ausführungsquelle …</option><option value="local">Lokal</option><option value="miniguard">MiniGuard</option></select>
+    <select data-bulk-for="settings" name="bulk_miniguard_id" hidden disabled><option value="">MiniGuard …</option>{% for a in miniguards %}<option value="{{a.id}}">{{a.name}}</option>{% endfor %}</select>
+    <div class="multi-checkbox-grid" data-bulk-for="dependencies" hidden>{% for c in all_checks %}<label class="multi-checkbox-option"><input type="checkbox" name="bulk_dependencies" value="{{ c.id }}" disabled><span><strong>{{ c.name }}</strong><small>{{ c.id }}</small></span></label>{% endfor %}</div>
+  </div>
+</div>
+<div class="guardian-grid">
+{% for item in guardians %}
+    {% set check = item.check %}
+    {% set state = item.state %}
+    {% set group = check.get('group') or 'Ohne Gruppe' %}
+    {% set status = 'maintenance' if item.maintenance_active else (state.get('status', 'pending') if check.get('enabled', true) else 'disabled') %}
+    {% set status_label = 'wird geprüft' if status == 'pending' else status %}
+    {% set icon = item.metadata.get('icon', 'network') %}
+    <article class="guardian-card status-{{ status }}"
+             data-group="{{ group }}"
+             data-tags="{{ check.get('tags', [])|join(',') }}"
+             data-search="{{ (check.name ~ ' ' ~ item.metadata.get('name', check.guardian) ~ ' ' ~ group ~ ' ' ~ check.get('tags', [])|join(' '))|lower }}"
+             data-status="{{ status }}"
+             data-name="{{ check.name|lower }}"
+             data-last-check="{{ state.get('last_check', '') }}"
+             data-response-time="{{ state.get('response_time', 0) }}"
+             data-guardian-id="{{ check.id }}">
+        <label class="guardian-select"><input type="checkbox" name="guardian_ids" value="{{ check.id }}"> auswählen</label>
+        <div class="guardian-top">
+            <span class="device-icon icon-{{ icon }}"><svg><use href="#icon-{{ icon }}"/></svg></span>
+            <div class="guardian-title">
+                <h2><a href="{{ url_for('guardian_detail', check_id=check.id) }}">{{ check.name }}</a></h2>
+                <p>{{ item.metadata.get('name', check.guardian) }} · <a class="guardian-group-link" href="{{ url_for('guardian_group_detail', group_name=group) }}">{{ group }}</a></p>
+                {% if check.get('tags') %}<div class="guardian-tags">{% for tag in check.tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
+                {% if check.get('_import_missing_secrets') %}<div class="guardian-import-warning"><svg><use href="#icon-warning"/></svg><span>Zugangsdaten fehlen – Guardian ist deaktiviert.</span></div>{% endif %}
+            </div>
+            <span class="status-badge guardian-live-status">{{ status_label }}</span>
+            <div class="card-menu">
+                <button class="kebab" type="button" aria-expanded="false">⋮</button>
+                <div class="card-menu-panel" hidden>
+                    <a href="{{ url_for('guardian_detail', check_id=check.id) }}">Details</a>
+                    <a href="{{ url_for('edit_guardian', check_id=check.id) }}">Bearbeiten</a>
+                    <a href="{{ url_for('history', guardian_id=check.id) }}">Historie</a>
+                    <a href="{{ url_for('protocol', guardian_id=check.id) }}">Protokoll</a>
+                    <form method="post" action="{{ url_for('duplicate_guardian', check_id=check.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">Duplizieren</button>
+                    </form>
+                    <form method="post" action="{{ url_for('toggle_guardian', check_id=check.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">{{ 'Deaktivieren' if check.get('enabled', true) else 'Aktivieren' }}</button>
+                    </form>
+                    {% if item.maintenance_active %}
+                    <form method="post" action="{{ url_for('maintenance_stop', check_id=check.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">Wartung beenden</button>
+                    </form>
+                    {% else %}
+                    <a href="{{ url_for('guardian_detail', check_id=check.id) }}#maintenance">Wartungsmodus</a>
+                    {% endif %}
+                    <form method="post"
+                          action="{{ url_for('delete_guardian', check_id=check.id) }}"
+                          onsubmit="return confirm('Guardian wirklich löschen?\n\nDer Guardian, sein gespeicherter Laufzeitstatus und alle zugehörigen Incidents werden dauerhaft gelöscht.')">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="delete_incidents" value="1">
+                        <button class="menu-danger" type="submit">Löschen</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {% if item.beacon_health.coverage_state != 'ok' %}
+        <div class="guardian-beacon-alert is-{{ item.beacon_health.coverage_state }}" role="alert">
+            <svg><use href="#icon-{{ 'critical' if item.beacon_health.coverage_state == 'critical' else 'warning' }}"/></svg>
+            <div>
+                <strong>{{ item.beacon_health.coverage_message }}</strong>
+                {% if item.beacon_health.coverage_state == 'critical' %}
+                <span>Keine aktive Rule kann über einen erreichbaren Beacon eine Statusmeldung versenden.</span>
+                {% elif item.beacon_health.can_alert %}
+                <span>Warning oder Critical können gemeldet werden, eine Recovery-/OK-Rule mit erreichbarem Beacon fehlt.</span>
+                {% else %}
+                <span>Recovery/OK kann gemeldet werden, eine Warning- oder Critical-Rule mit erreichbarem Beacon fehlt.</span>
+                {% endif %}
+            </div>
+            <a href="{{ url_for('guardian_detail', check_id=check.id) }}#notification-routing">Details</a>
+        </div>
+        {% endif %}
+
+        <p class="guardian-message guardian-live-message">
+            {% if item.maintenance_active %}
+                Wartungsmodus aktiv
+            {% else %}
+                {{ state.get('message', 'Guardian wird nach dem Dienststart automatisch geprüft.') }}
+            {% endif %}
+        </p>
+
+        <div class="guardian-stats">
+            <div><svg><use href="#icon-clock"/></svg><span>Intervall</span><strong>{{ format_duration_seconds(check.get('interval', 60)) }}</strong></div>
+            <div><svg><use href="#icon-calendar"/></svg><span>Letzte Prüfung</span><strong class="last-check-value guardian-live-last-check" data-lanaxy-datetime="{{ state.get('last_check', '—') }}">{{ state.get('last_check', '—') }}</strong></div>
+            <div class="guardian-live-metric">
+                {% if check.guardian == 'package_updates' %}
+                <svg><use href="#icon-settings"/></svg><span>Updates</span><strong class="guardian-live-uptime">{{ state.get('details', {}).get('updates', '—') }}</strong>
+                {% else %}
+                <svg><use href="#icon-uptime"/></svg><span>Verfügbarkeit</span><strong class="guardian-live-uptime">{{ state.get('uptime', '—') }}{% if state.get('uptime') is not none %} %{% endif %}</strong>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="guardian-actions">
+            <button class="button action-primary guardian-test-button"
+                    type="button"
+                    data-test-url="{{ url_for('test_guardian', check_id=check.id) }}">
+                Jetzt prüfen
+            </button>
+            <a class="button" href="{{ url_for('guardian_detail', check_id=check.id) }}">{{ 'Updates anzeigen' if check.guardian == 'package_updates' else 'Details' }}</a>
+        </div>
+    </article>
+{% else %}
+    <div class="empty">
+        <h2>Noch keine Guardians</h2>
+        <p>Lege deine erste Überwachung an.</p>
+    </div>
+{% endfor %}
+</div>
+</form>
+
+<script src="{{ url_for('static', filename='card-menu.js') }}"></script>
+<script>
+function formatGuardianDate(value) {
+    if (window.LANaxyDateTime?.format) {
+        return window.LANaxyDateTime.format(value, "datetime");
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? (value || "—") : date.toLocaleString("de-DE");
+}
+
+document.querySelectorAll(".last-check-value").forEach((element) => {
+    element.textContent = formatGuardianDate(element.textContent.trim());
+});
+
+
+document.getElementById("direct-add-guardian")?.addEventListener("change", (event) => {
+    if (event.target.value) window.location.href = event.target.value;
+});
+
+document.getElementById("guardian-group-filter")?.addEventListener("change", (event) => {
+    document.querySelectorAll(".guardian-card[data-group]").forEach((card) => {
+        card.hidden = Boolean(event.target.value)
+            && card.dataset.group !== event.target.value;
+    });
+});
+
+function applyGuardianStatus(card, guardian) {
+    const knownStatuses = [
+        "ok", "warning", "critical", "blocked",
+        "maintenance", "disabled", "pending"
+    ];
+    knownStatuses.forEach((status) => {
+        card.classList.remove(`status-${status}`);
+    });
+
+    const status = guardian.enabled
+        ? (guardian.status || "pending")
+        : "disabled";
+    card.classList.add(`status-${status}`);
+
+    const statusElement = card.querySelector(".guardian-live-status");
+    const messageElement = card.querySelector(".guardian-live-message");
+    const checkElement = card.querySelector(".guardian-live-last-check");
+    const uptimeElement = card.querySelector(".guardian-live-uptime");
+
+    if (statusElement) {
+        statusElement.textContent = status === "pending"
+            ? "wird geprüft"
+            : status;
+    }
+    if (messageElement) {
+        messageElement.textContent = guardian.message || "Guardian wird geprüft.";
+    }
+    if (checkElement) {
+        checkElement.textContent = formatGuardianDate(guardian.last_check || "—");
+    }
+    if (uptimeElement) {
+        if (guardian.guardian === "package_updates") {
+            uptimeElement.textContent = guardian.details?.updates ?? "—";
+        } else {
+            uptimeElement.textContent = guardian.uptime === null
+                || guardian.uptime === undefined
+                ? "—"
+                : `${guardian.uptime} %`;
+        }
+    }
+}
+
+async function refreshGuardianStatuses() {
+    if (document.hidden) return;
+    try {
+        const response = await fetch(
+            {{ url_for('guardian_status_api')|tojson }},
+            {headers: {"Accept": "application/json"}}
+        );
+        if (!response.ok) return;
+        const payload = await response.json();
+        Object.entries(payload.guardians || {}).forEach(([id, guardian]) => {
+            const card = document.querySelector(
+                `.guardian-card[data-guardian-id="${CSS.escape(id)}"]`
+            );
+            if (card) applyGuardianStatus(card, guardian);
+        });
+    } catch (error) {
+        console.debug("Guardian-Live-Status nicht verfügbar:", error);
+    }
+}
+
+
+const searchInput = document.getElementById("guardian-search");
+const tagFilter = document.getElementById("guardian-tag-filter");
+const groupFilterElement = document.getElementById("guardian-group-filter");
+const statusFilter = document.getElementById("guardian-status-filter");
+const sortSelect = document.getElementById("guardian-sort");
+const guardianGrid = document.querySelector(".guardian-grid");
+const filterStorageKey = "lanaxy.guardianFilters.v1";
+
+function saveGuardianFilters() {
+    localStorage.setItem(filterStorageKey, JSON.stringify({
+        search: searchInput?.value || "",
+        tag: tagFilter?.value || "",
+        group: groupFilterElement?.value || "",
+        status: statusFilter?.value || "",
+        sort: sortSelect?.value || "name",
+    }));
+}
+function loadGuardianFilters() {
+    try {
+        const value = JSON.parse(localStorage.getItem(filterStorageKey) || "{}");
+        if (searchInput) searchInput.value = value.search || "";
+        if (tagFilter) tagFilter.value = value.tag || "";
+        if (groupFilterElement) groupFilterElement.value = value.group || "";
+        if (statusFilter) statusFilter.value = value.status || "";
+        if (sortSelect) sortSelect.value = value.sort || "name";
+    } catch (_) {}
+}
+function statusRank(status) {
+    return {critical:0, warning:1, blocked:2, pending:3, ok:4, disabled:5, maintenance:6}[status] ?? 9;
+}
+function applyGuardianFilters() {
+    const query = (searchInput?.value || "").trim().toLowerCase();
+    const tag = tagFilter?.value || "";
+    const group = groupFilterElement?.value || "";
+    const status = statusFilter?.value || "";
+    const cards = [...document.querySelectorAll(".guardian-card")];
+    cards.forEach((card) => {
+        const tags = (card.dataset.tags || "").split(",").filter(Boolean);
+        card.hidden = !(
+            (!query || (card.dataset.search || "").includes(query))
+            && (!tag || tags.includes(tag))
+            && (!group || card.dataset.group === group)
+            && (!status || card.dataset.status === status)
+        );
+    });
+    const sort = sortSelect?.value || "name";
+    cards.sort((a, b) => {
+        if (sort === "status") return statusRank(a.dataset.status) - statusRank(b.dataset.status);
+        if (sort === "last_check") return (b.dataset.lastCheck || "").localeCompare(a.dataset.lastCheck || "");
+        if (sort === "response_time") return Number(a.dataset.responseTime || 0) - Number(b.dataset.responseTime || 0);
+        return (a.dataset.name || "").localeCompare(b.dataset.name || "", "de");
+    });
+    cards.forEach(card => guardianGrid?.appendChild(card));
+    saveGuardianFilters();
+    updateGuardianBulkToolbar();
+}
+loadGuardianFilters();
+[searchInput, tagFilter, groupFilterElement, statusFilter, sortSelect].forEach((element) => {
+    element?.addEventListener(element === searchInput ? "input" : "change", applyGuardianFilters);
+});
+const guardianBulkToolbar = document.getElementById("guardian-bulk-toolbar");
+const guardianBulkAction = document.getElementById("guardian-bulk-action");
+const guardianSelectionCount = document.getElementById("guardian-selection-count");
+const guardianCheckboxes = () => [...document.querySelectorAll('input[name="guardian_ids"]')];
+
+function updateGuardianBulkFields() {
+    const action = guardianBulkAction?.value || "";
+    document.querySelectorAll("[data-bulk-for]").forEach((field) => {
+        const visible = field.dataset.bulkFor === action;
+        field.hidden = !visible;
+        if ("disabled" in field) field.disabled = !visible;
+        field.querySelectorAll?.("input, select, textarea").forEach(input => { input.disabled = !visible; });
+    });
+}
+
+function updateGuardianBulkToolbar() {
+    const selected = guardianCheckboxes().filter((input) => input.checked);
+    if (guardianBulkToolbar) guardianBulkToolbar.hidden = selected.length === 0;
+    if (guardianSelectionCount) guardianSelectionCount.textContent = `${selected.length} ausgewählt`;
+    const selectAll = document.getElementById("select-all-guardians");
+    const visible = guardianCheckboxes().filter((input) => !input.closest(".guardian-card")?.hidden);
+    if (selectAll) {
+        selectAll.checked = visible.length > 0 && visible.every((input) => input.checked);
+        selectAll.indeterminate = visible.some((input) => input.checked) && !visible.every((input) => input.checked);
+    }
+}
+
+document.getElementById("select-all-guardians")?.addEventListener("change", (event) => {
+    document.querySelectorAll('.guardian-card:not([hidden]) input[name="guardian_ids"]').forEach((input) => input.checked = event.target.checked);
+    updateGuardianBulkToolbar();
+});
+guardianCheckboxes().forEach((input) => input.addEventListener("change", updateGuardianBulkToolbar));
+guardianBulkAction?.addEventListener("change", updateGuardianBulkFields);
+updateGuardianBulkFields();
+updateGuardianBulkToolbar();
+document.getElementById("export-selected-guardians")?.addEventListener("click", () => {
+    const ids = [...document.querySelectorAll('input[name="guardian_ids"]:checked')].map(input => input.value);
+    const url = new URL({{ url_for('guardian_export')|tojson }}, window.location.origin);
+    if (ids.length) url.searchParams.set("ids", ids.join(","));
+    window.location.href = url;
+});
+document.getElementById("open-guardian-import")?.addEventListener("click", () => {
+    document.querySelector('#guardian-import-form input[type="file"]')?.click();
+});
+document.querySelector('#guardian-import-form input[type="file"]')?.addEventListener("change", (event) => {
+    if (event.target.files.length) document.getElementById("guardian-import-form")?.submit();
+});
+applyGuardianFilters();
+
+setInterval(refreshGuardianStatuses, 5000);
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshGuardianStatuses();
+});
+
+document.querySelectorAll(".guardian-test-button").forEach((button) => {
+    button.addEventListener("click", async () => {
+        const original = button.textContent;
+        button.disabled = true;
+        button.textContent = "Prüfung läuft …";
+        try {
+            const data = new FormData();
+            data.append("_csrf_token", {{ csrf_token()|tojson }});
+            const response = await fetch(button.dataset.testUrl, {
+                method: "POST",
+                body: data,
+            });
+            const payload = await response.json();
+            const result = payload.result || {};
+            window.showToast(
+                result.message || (payload.ok ? "Guardian ist erreichbar." : "Guardian meldet ein Problem."),
+                payload.ok ? "success" : "error",
+                result.response_time !== undefined ? `${result.response_time} ms` : ""
+            );
+            await refreshGuardianStatuses();
+        } catch (error) {
+            window.showToast(`Prüfung fehlgeschlagen: ${error.message}`, "error");
+        } finally {
+            button.disabled = false;
+            button.textContent = original;
+        }
+    });
+});
+</script>
+{% endblock %}

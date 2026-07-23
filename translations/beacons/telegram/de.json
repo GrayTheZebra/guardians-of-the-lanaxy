@@ -1,0 +1,19 @@
+{
+  "name": "Telegram",
+  "description": "Sendet Meldungen über einen Telegram-Bot.",
+  "category": "Messenger",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "bot_token": {
+      "label": "Bot-Token"
+    },
+    "chat_id": {
+      "label": "Chat-ID"
+    },
+    "timeout": {
+      "label": "Timeout (Sekunden)"
+    }
+  }
+}

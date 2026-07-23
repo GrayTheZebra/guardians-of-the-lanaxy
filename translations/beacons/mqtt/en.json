@@ -1,0 +1,37 @@
+{
+  "name": "MQTT",
+  "description": "Sends events as JSON to an MQTT broker.",
+  "category": "Network",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "host": {
+      "label": "Host or IP"
+    },
+    "port": {
+      "label": "Port"
+    },
+    "username": {
+      "label": "Username"
+    },
+    "password": {
+      "label": "Password"
+    },
+    "topic": {
+      "label": "Topic"
+    },
+    "qos": {
+      "label": "QoS"
+    },
+    "retain": {
+      "label": "Retain"
+    },
+    "tls": {
+      "label": "Use TLS"
+    },
+    "client_id": {
+      "label": "Client ID"
+    }
+  }
+}

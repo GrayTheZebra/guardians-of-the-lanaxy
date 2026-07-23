@@ -1,0 +1,13 @@
+#!/bin/bash
+set -euo pipefail
+
+PROJECT_DIR="/opt/guardians-of-the-lanaxy"
+ENTRYPOINT="${PROJECT_DIR}/lanaxy.py"
+
+if [ ! -f "$ENTRYPOINT" ]; then
+    echo "Fehler: LANaxy wurde nicht unter $ENTRYPOINT gefunden." >&2
+    exit 1
+fi
+
+cd "$PROJECT_DIR"
+exec /usr/bin/python3 "$ENTRYPOINT" "$@"

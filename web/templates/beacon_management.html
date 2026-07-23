@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Beacon-Typen · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <h1>Beacon-Typen</h1>
+        <p>Mitgelieferte und benutzerdefinierte Benachrichtigungs-Plugins</p>
+    </div>
+    <div class="heading-actions">
+        <a class="button" href="{{ url_for('custom_beacon_template') }}">Paketvorlage (ZIP)</a>
+        <a class="button primary" href="{{ url_for('custom_beacon_import') }}">Plugin-Paket importieren</a>
+    </div>
+</section>
+
+<section class="management-section">
+    <h2>Mitgelieferte Beacons</h2>
+    <div class="management-grid">
+    {% for beacon in builtin %}
+        <article class="management-card">
+            <span class="source-badge builtin">Integriert</span>
+            <h3>{{ beacon.name }}</h3>
+            <p>{{ beacon.description }}</p>
+            <dl>
+                <div><dt>Modul</dt><dd>{{ beacon.module }}</dd></div>
+                <div><dt>Version</dt><dd>{{ beacon.version }}</dd></div>
+                <div><dt>Autor</dt><dd>{{ beacon.author }}</dd></div>
+                <div><dt>Felder</dt><dd>{{ beacon.schema|length }}</dd></div>
+            </dl>
+            <a class="button" href="{{ url_for('notification_channel_add', channel_type=beacon.module) }}">
+                Beacon hinzufügen
+            </a>
+        </article>
+    {% endfor %}
+    </div>
+</section>
+
+<section class="management-section">
+    <h2>Benutzerdefinierte Beacons</h2>
+    <div class="management-grid">
+    {% for beacon in custom %}
+        <article class="management-card status-{{ beacon.status }}">
+            <span class="source-badge custom">Custom</span>
+            <h3>{{ beacon.name }}</h3>
+            <p>{{ beacon.description or beacon.error }}</p>
+            <dl>
+                <div><dt>Modul</dt><dd>{{ beacon.file_module }}</dd></div>
+                <div><dt>Version</dt><dd>{{ beacon.get('version', '—') }}</dd></div>
+                <div><dt>Autor</dt><dd>{{ beacon.get('author', '—') }}</dd></div>
+                <div><dt>Status</dt><dd>{{ beacon.status }}</dd></div>
+            </dl>
+            <div class="actions">
+                {% if beacon.status == 'loaded' %}
+                <a class="button" href="{{ url_for('notification_channel_add', channel_type=beacon.module) }}">
+                    Beacon hinzufügen
+                </a>
+                {% endif %}
+                <a class="button" href="{{ url_for('custom_beacon_export', module_name=beacon.file_module) }}">
+                    Paket exportieren
+                </a>
+                <form method="post"
+                      action="{{ url_for('custom_beacon_delete', module_name=beacon.file_module) }}"
+                      onsubmit="return confirm('Custom Beacon wirklich löschen?')">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button class="button danger" type="submit">Löschen</button>
+                </form>
+            </div>
+        </article>
+    {% else %}
+        <div class="empty"><p>Noch keine Custom Beacons installiert.</p></div>
+    {% endfor %}
+    </div>
+</section>
+{% endblock %}

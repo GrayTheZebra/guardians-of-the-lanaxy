@@ -1,0 +1,58 @@
+name: Test LANaxy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Abhängigkeiten installieren
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-yaml python3-paho-mqtt python3-requests python3-flask python3-gunicorn
+      - name: Shell-Skripte prüfen
+        run: |
+          bash -n bootstrap.sh
+          bash -n deploy/lanaxy.de/install.sh
+          bash -n scripts/deploy-public-installer.sh
+          cmp -s bootstrap.sh deploy/lanaxy.de/install.sh
+          bash -n install.sh
+          bash -n update.sh
+          bash -n miniguard_install.sh
+          bash -n scripts/setup-lanlord.sh
+      - name: Python kompilieren
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -B -m compileall -q .
+      - name: WSGI-Konfiguration prüfen
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          LANAXY_WEB_HOST: 127.0.0.1
+          LANAXY_WEB_PORT: "8090"
+        run: |
+          python3 -B -c "from web.run import app; assert app is not None"
+          python3 -B -m gunicorn --check-config --config web/gunicorn.conf.py web.run:app
+      - name: Pflichtdateien prüfen
+        run: |
+          test -f LICENSE
+          test -f THIRD_PARTY_LICENSES.md
+          test -f lanaxy.py
+          test -f web/app.py
+          test -f web/run.py
+          test -f web/gunicorn.conf.py
+          test -f examples/config.yaml
+          test -f systemd/lanaxy.service
+          test -f systemd/lanaxy-web.service
+          test -x bootstrap.sh
+          test -x deploy/lanaxy.de/install.sh
+          test -x scripts/deploy-public-installer.sh
+          test -f deploy/lanaxy.de/nginx-location.conf.example
+          test -f deploy/lanaxy.de/apache-location.conf.example

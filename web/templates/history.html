@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+{% block title %}Historie · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <h1>Historie</h1>
+        <p>Antwortzeiten und Verfügbarkeit</p>
+    </div>
+</section>
+
+<form class="history-controls" method="get">
+    <label>
+        <span>Guardian</span>
+        <select name="guardian_id" onchange="this.form.submit()">
+            {% for guardian in guardians %}
+                <option value="{{ guardian.id }}" {% if guardian.id == guardian_id %}selected{% endif %}>{{ guardian.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <div class="range-tabs">
+        {% for value, label in [(3, '3 Stunden'), (6, '6 Stunden'), (12, '12 Stunden'), (24, '24 Stunden'), (168, '7 Tage'), (720, '30 Tage'), (2160, '3 Monate'), (4320, '6 Monate'), (8760, '12 Monate')] %}
+            <a class="{{ 'active' if hours == value else '' }}"
+               href="{{ url_for('history', guardian_id=guardian_id, hours=value) }}">{{ label }}</a>
+        {% endfor %}
+    </div>
+</form>
+
+<section class="history-summary">
+    <article><strong id="sum-checks">—</strong><span>Prüfungen</span></article>
+    <article><strong id="sum-availability">—</strong><span>Verfügbarkeit</span></article>
+    <article><strong id="sum-average">—</strong><span>Ø Antwortzeit</span></article>
+    <article><strong id="sum-max">—</strong><span>Max. Antwortzeit</span></article>
+    <article><strong id="sum-acknowledged">—</strong><span>Quittierte Incidents</span></article>
+</section>
+
+<section class="chart-card">
+    <div class="chart-heading">
+        <div>
+            <h2>Antwortzeit</h2>
+            <p>Millisekunden je Prüfung</p>
+        </div>
+        <div class="chart-key">
+            <span><i class="key-dot key-ok"></i>OK</span>
+            <span><i class="key-dot key-warning"></i>Warning</span>
+            <span><i class="key-dot key-critical"></i>Critical</span>
+            <span><i class="key-line"></i>Durchschnitt</span>
+            <span><i class="key-ack"></i>Quittiert</span>
+        </div>
+    </div>
+
+    <div class="chart-wrap" id="chart-wrap">
+        <svg id="response-chart"
+             viewBox="0 0 1200 360"
+             preserveAspectRatio="xMidYMid meet"
+             aria-label="Antwortzeitverlauf"></svg>
+
+        <div id="chart-empty" class="chart-empty" hidden>
+            Noch keine historischen Daten vorhanden.
+        </div>
+
+        <div id="chart-tooltip" class="chart-tooltip" hidden>
+            <strong id="tooltip-title"></strong>
+            <span id="tooltip-range"></span>
+            <dl>
+                <div><dt>Antwortzeit</dt><dd id="tooltip-response"></dd></div>
+                <div><dt>Minimum</dt><dd id="tooltip-min"></dd></div>
+                <div><dt>Maximum</dt><dd id="tooltip-max"></dd></div>
+                <div><dt>Status</dt><dd id="tooltip-status"></dd></div>
+                <div><dt>Verfügbarkeit</dt><dd id="tooltip-uptime"></dd></div>
+                <div><dt>Messungen</dt><dd id="tooltip-samples"></dd></div>
+            </dl>
+        </div>
+    </div>
+</section>
+
+
+<section class="chart-card history-incidents-card">
+    <div class="chart-heading">
+        <div>
+            <h2>Incidents und Quittierungen</h2>
+            <p>Incidents im gewählten Zeitraum</p>
+        </div>
+        <button type="button" class="button" id="toggle-ok-incidents" hidden>OK-Incidents einblenden</button>
+    </div>
+    <div id="history-incidents" class="history-incident-list">
+        <div class="history-incidents-empty">Keine Incidents im gewählten Zeitraum.</div>
+    </div>
+</section>
+
+<section class="history-grid">
+    <article class="chart-card">
+        <div class="chart-heading">
+            <div><h2>Statusverteilung</h2></div>
+        </div>
+
+        <div class="status-bars">
+            <div><span>OK</span><progress id="bar-ok" max="1"></progress><strong id="count-ok">0</strong></div>
+            <div><span>Warning</span><progress id="bar-warning" max="1"></progress><strong id="count-warning">0</strong></div>
+            <div><span>Critical</span><progress id="bar-critical" max="1"></progress><strong id="count-critical">0</strong></div>
+        </div>
+    </article>
+
+    <article class="chart-card">
+        <div class="chart-heading">
+            <div><h2>Gesundheit</h2></div>
+        </div>
+
+        <div class="health-score">
+            <div class="score-ring" id="score-ring">
+                <strong id="score-value">—</strong>
+                <span>Verfügbarkeit</span>
+            </div>
+        </div>
+    </article>
+</section>
+
+<script>
+const guardianId = {{ guardian_id|tojson }};
+const hours = {{ hours }};
+const guardianName = document.querySelector(
+    'select[name="guardian_id"] option:checked'
+)?.textContent?.trim() || guardianId;
+
+const statusColor = {
+    ok: "#17d978",
+    warning: "#f3a51d",
+    critical: "#ff4557",
+};
+
+function formatTimestamp(value) {
+    if (!value) return "—";
+    return window.LANaxyDateTime.format(value, "datetime");
+}
+
+function formatRange(point) {
+    if (!point.timestamp_end || point.timestamp_end === point.timestamp) {
+        return formatTimestamp(point.timestamp);
+    }
+
+    const start = new Date(point.timestamp);
+    const end = new Date(point.timestamp_end);
+
+    return `${start.toLocaleString("de-DE")} – ${end.toLocaleTimeString("de-DE", {
+        hour: "2-digit",
+        minute: "2-digit",
+    })}`;
+}
+
+function drawLineChart(points, averageResponse, incidents = []) {
+    const svg = document.getElementById("response-chart");
+    const empty = document.getElementById("chart-empty");
+    const tooltip = document.getElementById("chart-tooltip");
+    const chartWrap = document.getElementById("chart-wrap");
+
+    svg.innerHTML = "";
+    tooltip.hidden = true;
+
+    if (!points.length) {
+        svg.hidden = true;
+        empty.hidden = false;
+        empty.style.display = "grid";
+        return;
+    }
+
+    svg.hidden = false;
+    empty.hidden = true;
+    empty.style.display = "none";
+
+    const width = 1200;
+    const height = 360;
+    const padding = {
+        left: 112,
+        right: 34,
+        top: 28,
+        bottom: 56,
+    };
+
+    const values = points.flatMap((point) => [
+        Number(point.response_time || 0),
+        Number(point.response_time_max || 0),
+    ]);
+
+    const rawMaximum = Math.max(...values, Number(averageResponse || 0), 1);
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawMaximum)));
+    const step = Math.max(
+        1,
+        Math.ceil(rawMaximum / magnitude / 5) * magnitude
+    );
+    const maximum = Math.ceil(rawMaximum / step) * step;
+
+    const x = (index) =>
+        padding.left +
+        index *
+            ((width - padding.left - padding.right) /
+                Math.max(points.length - 1, 1));
+
+    const y = (value) =>
+        padding.top +
+        (maximum - value) *
+            ((height - padding.top - padding.bottom) / maximum);
+
+    for (let index = 0; index <= 5; index++) {
+        const value = Math.round(maximum * (1 - index / 5) * 100) / 100;
+        const gridY =
+            padding.top +
+            index *
+                ((height - padding.top - padding.bottom) / 5);
+
+        svg.insertAdjacentHTML(
+            "beforeend",
+            `<line class="grid-line" x1="${padding.left}" y1="${gridY}" x2="${width - padding.right}" y2="${gridY}"/>
+             <text class="axis-text axis-y" x="${padding.left - 24}" y="${gridY + 4}" text-anchor="end">${value} ms</text>`
+        );
+    }
+
+    const averageY = y(Number(averageResponse || 0));
+    svg.insertAdjacentHTML(
+        "beforeend",
+        `<line class="average-line" x1="${padding.left}" y1="${averageY}" x2="${width - padding.right}" y2="${averageY}"/>
+         <text class="average-label" x="${width - padding.right - 4}" y="${averageY - 8}" text-anchor="end">Ø ${averageResponse} ms</text>`
+    );
+
+    const path = points
+        .map(
+            (point, index) =>
+                `${index ? "L" : "M"} ${x(index)} ${y(
+                    Number(point.response_time || 0)
+                )}`
+        )
+        .join(" ");
+
+    const area = `${path} L ${x(points.length - 1)} ${
+        height - padding.bottom
+    } L ${x(0)} ${height - padding.bottom} Z`;
+
+    svg.insertAdjacentHTML(
+        "beforeend",
+        `<defs>
+            <linearGradient id="history-area" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#7658ff" stop-opacity=".38"/>
+                <stop offset="100%" stop-color="#7658ff" stop-opacity="0"/>
+            </linearGradient>
+        </defs>
+        <path class="chart-area" d="${area}"/>
+        <path class="chart-line" d="${path}"/>`
+    );
+
+    const labelIndexes = [
+        0,
+        Math.floor((points.length - 1) / 2),
+        points.length - 1,
+    ].filter((value, index, array) => array.indexOf(value) === index);
+
+    labelIndexes.forEach((index) => {
+        const label = new Date(points[index].timestamp).toLocaleString(
+            "de-DE",
+            {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+            }
+        );
+
+        const anchor =
+            index === 0
+                ? "start"
+                : index === points.length - 1
+                ? "end"
+                : "middle";
+
+        svg.insertAdjacentHTML(
+            "beforeend",
+            `<text class="axis-text" x="${x(index)}" y="${
+                height - 18
+            }" text-anchor="${anchor}">${label}</text>`
+        );
+    });
+
+    const firstTime = new Date(points[0].timestamp).getTime();
+    const lastTime = new Date(points[points.length - 1].timestamp_end || points[points.length - 1].timestamp).getTime();
+    const xForTime = (timestamp) => {
+        const value = new Date(timestamp).getTime();
+        if (!Number.isFinite(value) || lastTime <= firstTime) return padding.left;
+        const ratio = Math.max(0, Math.min(1, (value - firstTime) / (lastTime - firstTime)));
+        return padding.left + ratio * (width - padding.left - padding.right);
+    };
+
+    incidents.filter((incident) => incident.acknowledged_at).forEach((incident) => {
+        const markerX = xForTime(incident.acknowledged_at);
+        const markerTitle = [
+            `Incident #${incident.id} quittiert: ${formatTimestamp(incident.acknowledged_at)}`,
+            incident.acknowledged_by ? `Von: ${incident.acknowledged_by}` : "",
+            incident.acknowledge_note ? `Kommentar: ${incident.acknowledge_note}` : "",
+        ].filter(Boolean).join("\n");
+        svg.insertAdjacentHTML(
+            "beforeend",
+            `<line class="ack-marker" x1="${markerX}" y1="${padding.top}" x2="${markerX}" y2="${height - padding.bottom}"/>
+             <circle class="ack-marker-dot" cx="${markerX}" cy="${padding.top + 8}" r="5"/>
+             <title>${escapeHtml(markerTitle)}</title>`
+        );
+    });
+
+    points.forEach((point, index) => {
+        const pointX = x(index);
+        const pointY = y(Number(point.response_time || 0));
+        const color = statusColor[point.status] || "#91a0b8";
+
+        svg.insertAdjacentHTML(
+            "beforeend",
+            `<line class="hover-guide" data-index="${index}" x1="${pointX}" y1="${padding.top}" x2="${pointX}" y2="${height - padding.bottom}"/>
+             <circle class="chart-point" data-index="${index}" cx="${pointX}" cy="${pointY}" r="${points.length > 250 ? 2.5 : 4}" fill="${color}"/>
+             <rect class="hover-target" data-index="${index}" x="${
+                pointX - Math.max(6, (width - padding.left - padding.right) / Math.max(points.length, 1) / 2)
+            }" y="${padding.top}" width="${Math.max(
+                12,
+                (width - padding.left - padding.right) / Math.max(points.length, 1)
+            )}" height="${height - padding.top - padding.bottom}"/>`
+        );
+    });
+
+    const showTooltip = (point, target) => {
+        document
+            .querySelectorAll(".hover-guide")
+            .forEach((guide) => guide.classList.remove("visible"));
+
+        const guide = document.querySelector(
+            `.hover-guide[data-index="${target.dataset.index}"]`
+        );
+
+        if (guide) guide.classList.add("visible");
+
+        document.getElementById("tooltip-title").textContent = guardianName;
+        document.getElementById("tooltip-range").textContent =
+            formatRange(point);
+        document.getElementById("tooltip-response").textContent =
+            `${point.response_time} ms`;
+        document.getElementById("tooltip-min").textContent =
+            `${point.response_time_min} ms`;
+        document.getElementById("tooltip-max").textContent =
+            `${point.response_time_max} ms`;
+        document.getElementById("tooltip-status").textContent =
+            point.status.toUpperCase();
+        document.getElementById("tooltip-status").className =
+            `tooltip-status tooltip-status-${point.status}`;
+        document.getElementById("tooltip-uptime").textContent =
+            `${point.uptime} %`;
+        document.getElementById("tooltip-samples").textContent =
+            point.samples;
+
+        tooltip.hidden = false;
+
+        const wrapRect = chartWrap.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+
+        let left =
+            targetRect.left -
+            wrapRect.left +
+            targetRect.width / 2 +
+            14;
+
+        if (left + tooltipRect.width > wrapRect.width - 12) {
+            left =
+                targetRect.left -
+                wrapRect.left -
+                tooltipRect.width -
+                14;
+        }
+
+        const top = Math.max(
+            8,
+            Math.min(
+                targetRect.top -
+                    wrapRect.top -
+                    tooltipRect.height / 2,
+                wrapRect.height - tooltipRect.height - 8
+            )
+        );
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    };
+
+    svg.querySelectorAll(".hover-target").forEach((target) => {
+        const point = points[Number(target.dataset.index)];
+
+        target.addEventListener("mouseenter", () =>
+            showTooltip(point, target)
+        );
+
+        target.addEventListener("mousemove", () =>
+            showTooltip(point, target)
+        );
+    });
+
+    chartWrap.addEventListener("mouseleave", () => {
+        tooltip.hidden = true;
+        document
+            .querySelectorAll(".hover-guide")
+            .forEach((guide) => guide.classList.remove("visible"));
+    });
+}
+
+let historyIncidents = [];
+let showOkIncidentsWithoutComments = false;
+
+function incidentResolvedToOk(incident) {
+    const normalizedMessage = String(incident.message || "").toLowerCase();
+    return /(?:-|=|→)>?\s*ok\b/.test(normalizedMessage);
+}
+
+function incidentHasComment(incident) {
+    return Boolean(
+        String(incident.acknowledge_note || "").trim() ||
+        (Array.isArray(incident.notes) && incident.notes.some((note) => String(note.message || "").trim()))
+    );
+}
+
+function renderIncidents(incidents = historyIncidents) {
+    historyIncidents = Array.isArray(incidents) ? incidents : [];
+    const container = document.getElementById("history-incidents");
+    const toggle = document.getElementById("toggle-ok-incidents");
+    const hiddenOkCount = historyIncidents.filter((incident) =>
+        incidentResolvedToOk(incident) && !incidentHasComment(incident)
+    ).length;
+    const visibleIncidents = historyIncidents.filter((incident) =>
+        showOkIncidentsWithoutComments || !incidentResolvedToOk(incident) || incidentHasComment(incident)
+    );
+
+    toggle.hidden = hiddenOkCount === 0;
+    toggle.textContent = showOkIncidentsWithoutComments
+        ? `OK-Incidents ausblenden (${hiddenOkCount})`
+        : `OK-Incidents einblenden (${hiddenOkCount})`;
+
+    if (!visibleIncidents.length) {
+        const suffix = hiddenOkCount ? ` ${hiddenOkCount} OK-Incident${hiddenOkCount === 1 ? " ist" : "s sind"} ausgeblendet.` : "";
+        container.innerHTML = `<div class="history-incidents-empty">Keine relevanten Incidents im gewählten Zeitraum.${suffix}</div>`;
+        return;
+    }
+    container.innerHTML = visibleIncidents.map((incident) => {
+        const acknowledgement = incident.acknowledged_at
+            ? `<div class="history-incident-ack"><strong>Quittiert</strong><span>${formatTimestamp(incident.acknowledged_at)}${incident.acknowledged_by ? ` · ${escapeHtml(incident.acknowledged_by)}` : ""}</span>${incident.acknowledge_note ? `<small>${escapeHtml(incident.acknowledge_note)}</small>` : ""}</div>`
+            : '<div class="history-incident-open"><strong>Nicht quittiert</strong></div>';
+        const notes = Array.isArray(incident.notes) && incident.notes.length
+            ? `<div class="history-incident-notes"><strong>Bearbeitungsnotizen</strong>${incident.notes.map((note) => `<div class="history-incident-note"><span>${formatTimestamp(note.timestamp)}${note.actor ? ` · ${escapeHtml(note.actor)}` : ""}</span><p>${escapeHtml(note.message || "")}</p></div>`).join("")}</div>`
+            : "";
+        const resolvedToOk = incidentResolvedToOk(incident);
+        const displayState = resolvedToOk ? "ok" : (incident.severity || "warning");
+        return `<article class="history-incident history-incident-${escapeHtml(displayState)}">
+            <div><strong>Incident #${incident.id}</strong><span>${escapeHtml(incident.message || "Keine Meldung")}</span></div>
+            <div class="history-incident-times"><span>Beginn: ${formatTimestamp(incident.started_at)}</span>${incident.resolved_at ? `<span>Beendet: ${formatTimestamp(incident.resolved_at)}</span>` : '<span>Noch offen</span>'}</div>
+            ${acknowledgement}
+            ${notes}
+        </article>`;
+    }).join("");
+}
+
+document.getElementById("toggle-ok-incidents").addEventListener("click", () => {
+    showOkIncidentsWithoutComments = !showOkIncidentsWithoutComments;
+    renderIncidents();
+});
+
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+    })[character]);
+}
+
+fetch(
+    `/api/history/${encodeURIComponent(guardianId)}?hours=${hours}`,
+    { cache: "no-store" }
+)
+    .then((response) => {
+        if (!response.ok) {
+            throw new Error(`Historien-API antwortet mit HTTP ${response.status}`);
+        }
+        return response.json();
+    })
+    .then((data) => {
+        const summary = data.summary;
+
+        document.getElementById("sum-checks").textContent =
+            summary.checks;
+        document.getElementById("sum-availability").textContent =
+            `${summary.availability} %`;
+        document.getElementById("sum-average").textContent =
+            `${summary.average_response_time} ms`;
+        document.getElementById("sum-max").textContent =
+            `${summary.max_response_time} ms`;
+        document.getElementById("sum-acknowledged").textContent =
+            `${summary.acknowledged_incidents} / ${summary.incidents}`;
+
+        const maximumCount = Math.max(
+            summary.ok,
+            summary.warning,
+            summary.critical,
+            1
+        );
+
+        ["ok", "warning", "critical"].forEach((key) => {
+            document.getElementById(`bar-${key}`).max =
+                maximumCount;
+            document.getElementById(`bar-${key}`).value =
+                summary[key];
+            document.getElementById(`count-${key}`).textContent =
+                summary[key];
+        });
+
+        document.getElementById("score-value").textContent =
+            `${summary.availability} %`;
+
+        document
+            .getElementById("score-ring")
+            .style.setProperty(
+                "--score",
+                `${summary.availability * 3.6}deg`
+            );
+
+        drawLineChart(
+            data.points,
+            summary.average_response_time,
+            data.incidents || []
+        );
+        renderIncidents(data.incidents || []);
+    })
+    .catch((error) => {
+        const svg = document.getElementById("response-chart");
+        const empty = document.getElementById("chart-empty");
+        svg.hidden = true;
+        empty.hidden = false;
+        empty.style.display = "grid";
+        empty.textContent = `Historie konnte nicht geladen werden: ${error.message}`;
+        console.error(error);
+    });
+</script>
+{% endblock %}

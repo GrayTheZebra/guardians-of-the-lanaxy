@@ -1,0 +1,652 @@
+{% extends "base.html" %}
+{% block title %}{{ t('system.title') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <h1>{{ t('system.title') }}</h1>
+        <p>{{ t('system.subtitle') }}</p>
+    </div>
+</section>
+
+<section class="system-health-overview">
+    <a class="system-health-tile {{ 'ok' if service_status.lanaxy == 'active' else 'critical' }}"
+       href="#general">
+        <span class="live-dot"></span>
+        <div><strong>Monitoring</strong><small>{{ service_status.lanaxy }}</small></div>
+    </a>
+    <a class="system-health-tile {{ 'ok' if service_status.web == 'active' else 'critical' }}"
+       href="#general">
+        <span class="live-dot"></span>
+        <div><strong>Webserver</strong><small>{{ service_status.web }}</small></div>
+    </a>
+    {% set mqtt_enabled = system_mqtt.get('enabled', false) %}
+    <a class="system-health-tile {{ 'ok' if mqtt_enabled and mqtt_connected else ('critical' if mqtt_enabled else 'disabled') }}"
+       href="#system-mqtt">
+        <span class="live-dot"></span>
+        <div><strong>MQTT</strong><small>{{ 'verbunden' if mqtt_connected else ('getrennt' if mqtt_enabled else 'deaktiviert') }}</small></div>
+    </a>
+    <a class="system-health-tile {{ 'critical' if problem_guardian_count else 'ok' }}"
+       href="{{ url_for('guardian_management') }}">
+        <strong>{{ active_guardian_count }}</strong>
+        <div><span>Guardians</span><small>{{ problem_guardian_count }} Probleme</small></div>
+    </a>
+    <a class="system-health-tile ok" href="{{ url_for('beacons_page') }}">
+        <strong>{{ beacon_count }}</strong>
+        <div><span>Beacons</span><small>aktiv</small></div>
+    </a>
+    <a class="system-health-tile ok" href="{{ url_for('rules_page') }}">
+        <strong>{{ rule_count }}</strong>
+        <div><span>Rules</span><small>aktiv</small></div>
+    </a>
+    <a class="system-health-tile ok" href="{{ url_for('portals_page') }}">
+        <strong>{{ portal_count }}</strong>
+        <div><span>Portals</span><small>aktiv</small></div>
+    </a>
+    <a class="system-health-tile" href="#maintenance">
+        <strong>{{ database_stats.size_human }}</strong>
+        <div><span>Datenbank</span><small>{{ backup_count }} Backups</small></div>
+    </a>
+</section>
+
+<section class="chart-card system-readiness-card">
+  <div class="card-heading">
+    <div><h2>LANaxy-Bereitschaft</h2><p>Prüft die für einen normalen Betrieb wichtigsten Komponenten.</p></div>
+    <span class="status-badge {{ 'ok' if system_readiness.readiness == 'ready' else 'warning' }}">{{ system_readiness.readiness|upper }}</span>
+  </div>
+  <div class="readiness-check-grid">
+  {% for check in system_readiness.checks %}
+    <div class="readiness-check {{ 'ok' if check.ok else 'warning' }}">
+      <svg><use href="#icon-{{ 'check' if check.ok else 'warning' }}"/></svg>
+      <div><strong>{{ check.label }}</strong><small>{{ check.message }}</small></div>
+    </div>
+  {% endfor %}
+  </div>
+  <div class="form-actions">
+    <a class="button" href="{{ url_for('health') }}" target="_blank">Health JSON</a>
+    <a class="button" href="{{ url_for('readiness') }}" target="_blank">Readiness JSON</a>
+  </div>
+</section>
+
+<nav class="system-section-nav">
+    <a href="#general">{{ 'General' if language == 'en' else 'Allgemein' }}</a>
+    <a href="#maintenance">{{ 'Data maintenance' if language == 'en' else 'Datenpflege' }}</a>
+    <a href="#backups">Backups</a>
+    <a href="#diagnostics">{{ 'Diagnostics' if language == 'en' else 'Diagnose' }}</a>
+    <a href="{{ url_for('topology_page') }}">Abhängigkeiten</a>
+    <a href="{{ url_for('maintenance_planner_page') }}">Wartungsplaner</a>
+</nav>
+
+<section class="chart-card" style="margin-bottom:18px">
+  <div class="card-heading"><div><h2>Topologie und Wartung</h2><p>Folgealarme über Abhängigkeiten unterdrücken und geplante Wartungsfenster verwalten.</p></div><div class="form-actions"><a class="button" href="{{ url_for('topology_page') }}">Abhängigkeiten</a><a class="button primary" href="{{ url_for('maintenance_planner_page') }}">Wartung planen</a></div></div>
+</section>
+
+<section class="system-card-grid" id="general">
+    <article class="chart-card system-card">
+        <div class="system-card-heading">
+            <div class="system-card-icon"><svg><use href="#icon-server"/></svg></div>
+            <div><h2>{{ t('system.system_info') }}</h2><p>Installation, Dienste und lokale Datenbank.</p></div>
+        </div>
+        <dl class="system-facts">
+            <div><dt>Version</dt><dd>{{ app_version }}</dd></div>
+            <div><dt>Hostname</dt><dd>{{ hostname }}</dd></div>
+            <div><dt>Python</dt><dd>{{ python_version }}</dd></div>
+            <div><dt>Guardians</dt><dd>{{ guardian_count }}</dd></div>
+            <div><dt>lanaxy.service</dt><dd>{{ service_status.lanaxy }}</dd></div>
+            <div><dt>lanaxy-web.service</dt><dd>{{ service_status.web }}</dd></div>
+            <div><dt>Datenbank</dt><dd>{{ database_path }}</dd></div>
+        </dl>
+    </article>
+
+    <form method="post" action="{{ url_for('system_settings_section', section='language') }}" class="chart-card system-card system-card-form" data-system-section="language" data-reload="1">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="system-card-heading">
+            <div class="system-card-icon"><svg><use href="#icon-settings"/></svg></div>
+            <div><h2>Sprache</h2><p>Sprache der LANaxy-Oberfläche festlegen.</p></div>
+        </div>
+        <label>
+            <span>{{ t('system.language') }}</span>
+            <select name="language">
+                <option value="auto" {% if configured_language == 'auto' %}selected{% endif %}>{{ t('system.language_auto') }}</option>
+                {% for code, label in supported_languages.items() %}
+                    <option value="{{ code }}" {% if configured_language == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <div class="system-card-actions"><button class="button primary" type="submit">{{ t('common.save') }}</button></div>
+    </form>
+
+    <form id="access" method="post" action="{{ url_for('system_settings_section', section='access') }}" class="chart-card system-card system-card-form" data-system-section="access">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="system-card-heading">
+            <div class="system-card-icon"><svg><use href="#icon-shield"/></svg></div>
+            <div><h2>{{ t('system.access') }}</h2><p>Anmeldung und Sitzungsdauer der Weboberfläche.</p></div>
+        </div>
+        <div class="system-card-fields">
+            <label class="auth-toggle-row checkbox-row">
+                <input type="checkbox" name="auth_enabled" value="1" {% if auth.get('enabled') %}checked{% endif %}>
+                <span>{{ t('system.enabled') }}</span>
+            </label>
+            <label><span>{{ t('system.username') }}</span><input name="username" value="{{ auth.get('username','') }}"></label>
+            <label><span>{{ t('system.new_password') }}</span><input type="password" name="password" autocomplete="new-password"></label>
+            <label><span>{{ t('system.confirm_password') }}</span><input type="password" name="password_confirm" autocomplete="new-password"></label>
+            <label><span>{{ t('system.session_duration') }}</span><input type="number" min="15" name="session_lifetime_minutes" value="{{ auth.get('session_lifetime_minutes',480) }}"></label>
+        </div>
+        <p class="security-note">PBKDF2-SHA256 · Außerhalb eines vertrauenswürdigen LANs wird HTTPS empfohlen.</p>
+        <div class="system-card-actions"><button class="button primary" type="submit">{{ t('common.save') }}</button></div>
+    </form>
+
+    <form method="post" action="{{ url_for('system_settings_section', section='developer') }}" class="chart-card system-card system-card-form developer-mode-card" data-system-section="developer" data-reload="1">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="system-card-heading">
+            <div class="system-card-icon"><svg><use href="#icon-settings"/></svg></div>
+            <div><h2>Entwicklermodus</h2><p>Experimentelle und noch nicht vollständig geprüfte Funktionen freischalten.</p></div>
+        </div>
+        <div class="system-card-fields">
+            <label class="checkbox-row">
+                <input type="checkbox" name="developer_mode" value="1" {% if developer_mode %}checked{% endif %}>
+                <span>Entwicklermodus aktivieren</span>
+            </label>
+        </div>
+        <p class="security-note">Aktiviert derzeit den Menüpunkt „Cluster“. Experimentelle Funktionen können unvollständig sein oder sich noch ändern.</p>
+        <div class="system-card-actions"><button class="button primary" type="submit">{{ t('common.save') }}</button></div>
+    </form>
+
+    <form method="post" action="{{ url_for('system_settings_section', section='datetime') }}" class="chart-card system-card system-card-form datetime-card" data-system-section="datetime">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="system-card-heading">
+            <div class="system-card-icon"><svg><use href="#icon-clock"/></svg></div>
+            <div><h2>Datum und Uhrzeit</h2><p>Systemzeitzone und globale Darstellung von Zeitangaben in LANaxy.</p></div>
+        </div>
+        <p class="field-hint">Unterstützte Tokens: <code>dd</code>, <code>mm</code>, <code>yy</code>, <code>yyyy</code>, <code>HH</code>, <code>MM</code>, <code>ss</code>.</p>
+        <div class="system-card-fields">
+            <label><span>Systemzeitzone</span><select name="timezone">{% for zone in available_timezones %}<option value="{{ zone }}" {% if zone == host_timezone %}selected{% endif %}>{{ zone }}</option>{% endfor %}</select><small class="field-hint">Aktuelle Systemzeit: {{ host_local_time }}</small></label>
+            <label><span>Datumsformat</span><select id="date-format-preset"><option value="dd.mm.yyyy">31.12.2026</option><option value="dd.mm.yy">31.12.26</option><option value="yyyy-mm-dd">2026-12-31</option><option value="mm/dd/yyyy">12/31/2026</option><option value="custom">Frei konfigurierbar</option></select><input id="date-format" name="date_format" value="{{ configured_datetime.get('date_format', 'dd.mm.yyyy') }}"></label>
+            <label><span>Zeitformat</span><select id="time-format-preset"><option value="HH:MM:ss">23:59:59</option><option value="HH:MM">23:59</option><option value="H:MM">23:59 ohne führende Stunde</option><option value="custom">Frei konfigurierbar</option></select><input id="time-format" name="time_format" value="{{ configured_datetime.get('time_format', 'HH:MM:ss') }}"></label>
+            <label><span>Kombiniertes Format</span><input id="datetime-format" name="datetime_format" value="{{ configured_datetime.get('datetime_format', 'dd.mm.yyyy, HH:MM:ss') }}"><small class="field-hint">Beispiel: <span id="datetime-format-preview"></span></small></label>
+        </div>
+        <div class="system-card-actions"><button class="button primary" type="submit">{{ t('common.save') }}</button></div>
+    </form>
+
+    <form method="post" action="{{ url_for('system_settings_section', section='mdns') }}" class="chart-card system-card system-card-form" data-system-section="mdns" data-reload="1">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="system-card-heading">
+            <div class="system-card-icon"><svg><use href="#icon-network"/></svg></div>
+            <div><h2>mDNS</h2><p>LANaxy im lokalen Netz ohne feste IP-Adresse erreichbar machen.</p></div>
+        </div>
+        <div class="system-card-fields">
+            <label><span>mDNS-Name</span><div class="input-with-suffix"><input type="text" name="mdns_hostname" value="{{ mdns_hostname }}" maxlength="63" pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?" required><span>.local</span></div><small class="field-hint">Eindeutiger Name im lokalen Netz, beispielsweise <code>lanaxy-keller</code>.</small></label>
+            <label class="checkbox-row"><input type="checkbox" name="mdns_enabled" value="1" {% if mdns_enabled %}checked{% endif %}><span>mDNS aktivieren</span></label>
+        </div>
+        <dl class="system-facts">
+            <div><dt>Status</dt><dd>{{ 'Aktiv' if mdns_enabled else 'Deaktiviert' }}</dd></div>
+            <div><dt>Adresse</dt><dd><code>http://{{ mdns_hostname }}.local:8090</code></dd></div>
+            <div><dt>Dienst</dt><dd><code>_http._tcp</code></dd></div>
+        </dl>
+        <p class="security-note">mDNS funktioniert im selben lokalen Netzwerk. Windows benötigt je nach Installation einen mDNS-fähigen Resolver.</p>
+        <div class="system-card-actions"><button class="button primary" type="submit">{{ t('common.save') }}</button></div>
+    </form>
+</section>
+
+<section class="system-mqtt-section chart-card" id="system-mqtt">
+    <div class="chart-heading">
+        <div>
+            <h2>{{ t('system.system_mqtt') }}</h2>
+            <p>
+                {{ 'Publishes status, heartbeat and system information independently of Beacons.'
+                   if language == 'en'
+                   else 'Veröffentlicht Status, Heartbeat und Systeminformationen unabhängig von Beacons.' }}
+            </p>
+        </div>
+        <a class="button" href="{{ url_for('system_mqtt_settings') }}">
+            {{ t('system.configure') }}
+        </a>
+    </div>
+    <dl class="system-facts">
+        <div><dt>Status</dt><dd>{{ 'Verbunden' if mqtt_connected else ('Aktiv, aber getrennt' if system_mqtt.get('enabled', false) else 'Deaktiviert') }}</dd></div>
+        <div><dt>Broker</dt><dd>{{ (system_mqtt.get('host') or '—') }}{% if system_mqtt.get('host') %}:{{ system_mqtt.get('port', 1883) }}{% endif %}</dd></div>
+        <div><dt>Base Topic</dt><dd>{{ system_mqtt.get('base_topic', 'lanaxy') }}</dd></div>
+        <div><dt>Retain</dt><dd>{{ t('common.yes') if system_mqtt.get('retain', true) else t('common.no') }}</dd></div>
+    </dl>
+</section>
+
+<section class="system-section" id="maintenance">
+    <div class="section-heading settings-heading-stacked">
+        <div>
+            <h2>{{ 'Data maintenance' if language == 'en' else 'Datenpflege' }}</h2>
+            <p>
+                {{ 'Control data retention and database size.'
+                   if language == 'en'
+                   else 'Aufbewahrung und Größe der LANaxy-Datenbank verwalten.' }}
+            </p>
+        </div>
+    </div>
+
+    <div class="maintenance-stat-grid">
+        <article class="summary-card">
+            <div>
+                <strong>{{ database_stats.size_human }}</strong>
+                <span>{{ 'Database size' if language == 'en' else 'Datenbankgröße' }}</span>
+            </div>
+        </article>
+        <article class="summary-card">
+            <div>
+                <strong>{{ database_stats.events }}</strong>
+                <span>{{ 'Log entries' if language == 'en' else 'Protokolleinträge' }}</span>
+            </div>
+        </article>
+        <article class="summary-card">
+            <div>
+                <strong>{{ database_stats.metrics }}</strong>
+                <span>{{ 'History points' if language == 'en' else 'Historienpunkte' }}</span>
+            </div>
+        </article>
+        <article class="summary-card">
+            <div>
+                <strong>{{ retention_days }}</strong>
+                <span>{{ 'Retention days' if language == 'en' else 'Tage Aufbewahrung' }}</span>
+            </div>
+        </article>
+    </div>
+
+    <div class="system-grid">
+        <article class="chart-card">
+            <h3>{{ 'Automatic retention' if language == 'en' else 'Automatische Aufbewahrung' }}</h3>
+            <form method="post" action="{{ url_for('maintenance_settings') }}" class="maintenance-form-stack">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <label>
+                    <span>{{ 'Keep history and logs for days' if language == 'en' else 'Datenbank-Historie und Protokoll aufbewahren (Tage)' }}</span>
+                    <input type="number" min="1" max="3650" name="retention_days" value="{{ retention_days }}">
+                </label>
+                <label>
+                    <span>{{ 'Maximum full backups' if language == 'en' else 'Maximale vollständige Backups' }}</span>
+                    <input type="number" min="1" max="500" name="backup_keep_count" value="{{ backup_keep_count }}">
+                </label>
+                <label>
+                    <span>{{ 'Maximum configuration revisions' if language == 'en' else 'Maximale Konfigurationsstände' }}</span>
+                    <input type="number" min="5" max="2000" name="config_history_keep" value="{{ config_history_keep }}">
+                </label>
+                <p class="security-note">Ältere Einträge werden automatisch entfernt. Temporäre Dateien und verwaiste Metadaten werden ebenfalls bereinigt.</p>
+                <button class="button primary" type="submit">{{ t('common.save') }}</button>
+            </form>
+
+            <hr class="card-divider">
+
+            <form method="post" action="{{ url_for('maintenance_cleanup') }}" class="maintenance-form-stack">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <label>
+                    <span>{{ 'Delete data older than days' if language == 'en' else 'Daten löschen, die älter sind als (Tage)' }}</span>
+                    <input type="number" min="1" max="3650" name="retention_days" value="{{ retention_days }}">
+                </label>
+                <label class="checkbox-row">
+                    <input type="checkbox" name="vacuum" value="1" checked>
+                    <span>{{ 'Compact database afterwards' if language == 'en' else 'Datenbank anschließend verkleinern' }}</span>
+                </label>
+                <button class="button" type="submit">
+                    {{ 'Clean up now' if language == 'en' else 'Jetzt bereinigen' }}
+                </button>
+            </form>
+        </article>
+
+        <article class="chart-card danger-zone">
+            <h3>{{ 'Delete data' if language == 'en' else 'Daten löschen' }}</h3>
+            <p>
+                {{ 'These actions cannot be undone. Create a backup first.'
+                   if language == 'en'
+                   else 'Diese Aktionen können nicht rückgängig gemacht werden. Erstelle vorher ein Backup.' }}
+            </p>
+
+            <form method="post"
+                  action="{{ url_for('maintenance_clear_events') }}"
+                  onsubmit="return confirm('Alle Protokolleinträge wirklich löschen?')">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="button danger" type="submit">
+                    {{ 'Delete entire log' if language == 'en' else 'Komplettes Protokoll löschen' }}
+                </button>
+            </form>
+
+            <form method="post"
+                  action="{{ url_for('maintenance_clear_history') }}"
+                  onsubmit="return confirm('Die komplette Historie wirklich löschen?')">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="button danger" type="submit">
+                    {{ 'Delete complete history' if language == 'en' else 'Komplette Historie löschen' }}
+                </button>
+            </form>
+        </article>
+    </div>
+</section>
+
+<section class="system-section" id="backups">
+    <div class="section-heading settings-heading-stacked">
+        <div>
+            <h2>Backups</h2>
+            <p>
+                {{ 'Configuration, Custom Guardians, Custom Beacons and optionally the database.'
+                   if language == 'en'
+                   else 'Konfiguration, Custom Guardians, Custom Beacons und optional die Datenbank sichern.' }}
+            </p>
+        </div>
+    </div>
+
+    <div class="system-grid">
+        <article class="chart-card">
+            <h3>{{ 'Create backup' if language == 'en' else 'Backup erstellen' }}</h3>
+            <form method="post" action="{{ url_for('backup_create') }}" class="maintenance-form-stack">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <label class="checkbox-row">
+                    <input type="checkbox" name="include_database" value="1" checked>
+                    <span>{{ 'Include history and log database' if language == 'en' else 'Historie und Protokoll-Datenbank einschließen' }}</span>
+                </label>
+                <button class="button primary" type="submit">
+                    {{ 'Create backup now' if language == 'en' else 'Backup jetzt erstellen' }}
+                </button>
+            </form>
+        </article>
+
+        <article class="chart-card">
+            <h3>{{ 'Upload and restore' if language == 'en' else 'Backup hochladen und wiederherstellen' }}</h3>
+            <form method="post"
+                  action="{{ url_for('backup_upload_restore') }}"
+                  enctype="multipart/form-data"
+                  class="maintenance-form-stack"
+                  onsubmit="return confirm('Das Backup wirklich wiederherstellen? Die aktuelle Konfiguration wird vorher gesichert.')">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <label>
+                    <span>LANaxy Backup-ZIP</span>
+                    <input type="file" name="backup_file" accept=".zip,application/zip" required>
+                </label>
+                <label class="checkbox-row">
+                    <input type="checkbox" name="restore_database" value="1" checked>
+                    <span>{{ 'Restore database as well' if language == 'en' else 'Datenbank ebenfalls wiederherstellen' }}</span>
+                </label>
+                <button class="button" type="submit">
+                    {{ 'Validate and restore' if language == 'en' else 'Prüfen und wiederherstellen' }}
+                </button>
+            </form>
+        </article>
+    </div>
+
+    <article class="chart-card backup-list-card">
+        <h3>{{ 'Available backups' if language == 'en' else 'Vorhandene Backups' }}</h3>
+        <div class="backup-list">
+        {% for backup in backups %}
+            <div class="backup-row">
+                <div>
+                    <strong>{{ backup.name }}</strong>
+                    <small>
+                        {{ backup.get('created_at', backup.modified)|replace('T', ' ') }}
+                        · {{ backup.size_human }}
+                        {% if backup.includes_database %} · DB{% endif %}
+                        {% if backup.reason %} · {{ backup.reason }}{% endif %}
+                    </small>
+                </div>
+                <div class="backup-actions">
+                    <a class="button" href="{{ url_for('backup_download', filename=backup.name) }}">
+                        Download
+                    </a>
+                    <form method="post"
+                          action="{{ url_for('backup_restore_saved', filename=backup.name) }}"
+                          onsubmit="return confirm('Dieses Backup wirklich wiederherstellen?')">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="restore_database" value="1">
+                        <button class="button" type="submit">
+                            {{ 'Restore' if language == 'en' else 'Wiederherstellen' }}
+                        </button>
+                    </form>
+                    <form method="post"
+                          action="{{ url_for('backup_delete', filename=backup.name) }}"
+                          onsubmit="return confirm('Backup wirklich löschen?')">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button class="button danger" type="submit">{{ t('common.delete') }}</button>
+                    </form>
+                </div>
+            </div>
+        {% else %}
+            <div class="empty">
+                {{ 'No full backups yet.' if language == 'en' else 'Noch keine vollständigen Backups vorhanden.' }}
+            </div>
+        {% endfor %}
+        </div>
+    </article>
+</section>
+
+
+<section class="system-section" id="control">
+ <div class="section-heading settings-heading-stacked">
+  <div><h2>Control Engine</h2><p>Erlaubt autorisierten Portals, LANaxy zur Laufzeit zu steuern.</p></div>
+ </div>
+ <div class="system-grid">
+  <article class="chart-card">
+   <h3>Zugriff</h3>
+   {% if new_control_token %}
+   <div class="control-token-reveal">
+    <strong>Neuer Control-Token</strong>
+    <code id="control-token-value">{{ new_control_token }}</code>
+    <button class="button" type="button" onclick="copyControlToken()">Kopieren</button>
+    <small>Dieser Token wird nach dem Verlassen der Seite nicht erneut angezeigt.</small>
+   </div>
+   {% endif %}
+   <form method="post" action="{{ url_for('control_toggle') }}" class="maintenance-form-stack">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <label class="checkbox-row"><input type="checkbox" name="enabled" value="1" {% if control_config.get('enabled') %}checked{% endif %}><span>Control API aktiviert</span></label>
+    <button class="button primary">Speichern</button>
+   </form>
+   <hr class="card-divider">
+   <form method="post" action="{{ url_for('control_token_generate') }}" onsubmit="return confirm('Der bisherige Token wird sofort ungültig. Fortfahren?')">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <button class="button">Neuen Token erzeugen</button>
+   </form>
+   <p class="security-note">Der vollständige Token wird nur einmal nach dem Erzeugen angezeigt. Gespeichert wird ausschließlich ein Hash.</p>
+  </article>
+  <article class="chart-card">
+   <h3>Aktive Laufzeitzustände</h3>
+   <dl class="system-facts">
+    <div><dt>Global stumm</dt><dd>{{ 'Ja' if control_runtime.get('mute',{}).get('all') else 'Nein' }}</dd></div>
+    <div><dt>Wartungen</dt><dd>{{ control_runtime.get('maintenance',{})|length }}</dd></div>
+    <div><dt>Pausierte Rules</dt><dd>{{ control_runtime.get('paused_rules',{})|length }}</dd></div>
+    <div><dt>Audit-Einträge</dt><dd>{{ control_runtime.get('audit',[])|length }}</dd></div>
+   </dl>
+   <a class="button" href="{{ url_for('portals_page') }}">Portals verwalten</a>
+  </article>
+ </div>
+</section>
+
+<section class="system-section" id="service-account">
+ <div class="section-heading settings-heading-stacked">
+  <div>
+   <h2>LANLord</h2>
+   <p>Eigenes, eingeschränktes Systemkonto für alle dauerhaften LANaxy-Prozesse.</p>
+  </div>
+ </div>
+ <div class="system-grid">
+  <article class="chart-card">
+   <h3>Dienstkonto</h3>
+   <dl class="system-facts">
+    <div><dt>Linux-Benutzer</dt><dd>lanlord</dd></div>
+    <div><dt>Linux-Gruppe</dt><dd>lanlord</dd></div>
+    <div><dt>Anzeigename</dt><dd>LANLord</dd></div>
+    <div><dt>Home</dt><dd>/var/lib/lanaxy</dd></div>
+    <div><dt>Login-Shell</dt><dd>/usr/sbin/nologin</dd></div>
+   </dl>
+  </article>
+  <article class="chart-card">
+   <h3>Schutz</h3>
+   <p class="security-note">
+    Programmcode bleibt root-kontrolliert. LANLord darf nur die LANaxy-Konfiguration,
+    Custom Plugins, Backups, Statusdateien und die Datenbank verändern.
+   </p>
+   <p class="security-note">
+    Kernel, Geräte, Home-Verzeichnisse und das übrige Dateisystem sind durch
+    systemd-Sandboxing geschützt.
+   </p>
+  </article>
+ </div>
+</section>
+
+<section class="system-section" id="diagnostics">
+    <article class="chart-card diagnostic-card">
+        <div>
+            <h2>{{ 'Diagnostic package' if language == 'en' else 'Diagnosepaket' }}</h2>
+            <p>
+                {{ 'Creates a ZIP for support requests. Passwords and tokens are redacted.'
+                   if language == 'en'
+                   else 'Erstellt eine ZIP-Datei für Supportanfragen. Passwörter und Tokens werden entfernt.' }}
+            </p>
+            <ul>
+                <li>{{ 'Redacted configuration' if language == 'en' else 'Anonymisierte Konfiguration' }}</li>
+                <li>{{ 'Service status and recent journals' if language == 'en' else 'Dienststatus und letzte Journal-Einträge' }}</li>
+                <li>{{ 'System, Python and database information' if language == 'en' else 'System-, Python- und Datenbankinformationen' }}</li>
+                <li>{{ 'Current Guardian state without notification secrets' if language == 'en' else 'Aktueller Guardian-Status ohne Benachrichtigungsgeheimnisse' }}</li>
+            </ul>
+        </div>
+        <a class="button primary" href="{{ url_for('diagnostic_download') }}">
+            {{ 'Download diagnostic ZIP' if language == 'en' else 'Diagnose-ZIP herunterladen' }}
+        </a>
+    </article>
+</section>
+
+<script>
+async function copyControlToken() {
+    const tokenElement = document.getElementById("control-token-value");
+    const token = tokenElement?.textContent?.trim();
+
+    if (!token) {
+        window.showToast("Kein Token zum Kopieren vorhanden.", "error");
+        return;
+    }
+
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(token);
+        } else {
+            const helper = document.createElement("textarea");
+            helper.value = token;
+            helper.setAttribute("readonly", "");
+            helper.style.position = "fixed";
+            helper.style.opacity = "0";
+            document.body.appendChild(helper);
+            helper.select();
+            helper.setSelectionRange(0, helper.value.length);
+
+            const copied = document.execCommand("copy");
+            helper.remove();
+
+            if (!copied) {
+                throw new Error("Kopieren wurde vom Browser blockiert.");
+            }
+        }
+
+        window.showToast("Token kopiert.", "success");
+    } catch (error) {
+        tokenElement.focus?.();
+        window.getSelection()?.selectAllChildren(tokenElement);
+        window.showToast(
+            "Automatisches Kopieren ist nicht möglich. Der Token wurde markiert.",
+            "error"
+        );
+    }
+}
+</script>
+
+<script>
+async function copyControlToken() {
+    const tokenElement = document.getElementById("control-token-value");
+    const token = tokenElement?.textContent?.trim();
+    if (!token) { window.showToast("Kein Token zum Kopieren vorhanden.", "error"); return; }
+    try {
+        if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(token);
+        else {
+            const helper = document.createElement("textarea"); helper.value = token; helper.setAttribute("readonly", "");
+            helper.style.position = "fixed"; helper.style.opacity = "0"; document.body.appendChild(helper);
+            helper.select(); helper.setSelectionRange(0, helper.value.length);
+            const copied = document.execCommand("copy"); helper.remove();
+            if (!copied) throw new Error("Kopieren wurde vom Browser blockiert.");
+        }
+        window.showToast("Token kopiert.", "success");
+    } catch (error) {
+        tokenElement.focus?.(); window.getSelection()?.selectAllChildren(tokenElement);
+        window.showToast("Automatisches Kopieren ist nicht möglich. Der Token wurde markiert.", "error");
+    }
+}
+</script>
+
+<script>
+(() => {
+    document.querySelectorAll("form[data-system-section]").forEach(form => {
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            const originalText = button?.textContent || "Speichern";
+            if (button) {
+                button.disabled = true;
+                button.textContent = "Speichert …";
+            }
+            try {
+                const response = await fetch(form.action, {
+                    method: "POST",
+                    body: new FormData(form),
+                    headers: {"X-Requested-With": "XMLHttpRequest"},
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || `Speichern fehlgeschlagen (HTTP ${response.status}).`);
+                }
+                window.showToast(payload.message || "Einstellungen gespeichert.", "success");
+                form.querySelectorAll('input[type="password"]').forEach(input => input.value = "");
+                if (payload.redirect) {
+                    window.setTimeout(() => window.location.assign(payload.redirect), 350);
+                } else if (payload.reload || form.dataset.reload === "1") {
+                    window.setTimeout(() => window.location.reload(), 350);
+                }
+            } catch (error) {
+                window.showToast(error.message || "Einstellungen konnten nicht gespeichert werden.", "error");
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                }
+            }
+        });
+    });
+})();
+</script>
+
+<script>
+(() => {
+    const dateInput = document.getElementById("date-format");
+    const timeInput = document.getElementById("time-format");
+    const datePreset = document.getElementById("date-format-preset");
+    const timePreset = document.getElementById("time-format-preset");
+    const combined = document.getElementById("datetime-format");
+    const preview = document.getElementById("datetime-format-preview");
+
+    function syncPreset(select, input) {
+        const matching = [...select.options].find(option => option.value === input.value);
+        select.value = matching ? matching.value : "custom";
+    }
+    function refreshPreview() {
+        if (preview && combined) {
+            preview.textContent = window.LANaxyDateTime.applyPattern(new Date(2026, 11, 31, 23, 59, 58), combined.value);
+        }
+    }
+    function bindPreset(select, input) {
+        syncPreset(select, input);
+        select.addEventListener("change", () => {
+            if (select.value !== "custom") input.value = select.value;
+            combined.value = `${dateInput.value}, ${timeInput.value}`;
+            refreshPreview();
+        });
+        input.addEventListener("input", () => {
+            syncPreset(select, input);
+            refreshPreview();
+        });
+    }
+    if (dateInput && timeInput && combined) {
+        bindPreset(datePreset, dateInput);
+        bindPreset(timePreset, timeInput);
+        combined.addEventListener("input", refreshPreview);
+        refreshPreview();
+    }
+})();
+</script>
+{% endblock %}

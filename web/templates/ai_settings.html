@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}KI-Einstellungen · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Anbieter</p><h1>KI-Einstellungen</h1><p>OpenAI ist für den ersten Test aktiviert. Weitere Anbieter sind strukturell vorbereitet.</p></div><a class="button" href="{{ url_for('ai_assistant') }}">Zum KI-Assistenten</a></div>
+<form method="post" class="card form-card"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+<label>Anbieter<select name="provider">{% for key,p in providers.items() %}<option value="{{ key }}" {{ 'selected' if ai.get('provider','openai')==key else '' }}>{{ p.name }}{{ '' if p.implemented else ' (vorbereitet)' }}</option>{% endfor %}</select></label>
+<label>API-Basis-URL<input name="base_url" value="{{ ai.get('base_url','https://api.openai.com/v1') }}"></label>
+<label>Modell<input name="model" value="{{ ai.get('model','gpt-5-mini') }}"></label>
+<label>API-Key<input type="password" name="api_key" value="{{ ai.get('api_key','') }}" autocomplete="new-password"></label>
+<p class="field-hint">Der Key wird in der LANaxy-Konfiguration gespeichert und in der Oberfläche nicht erneut angezeigt.</p>
+<div class="form-actions"><button class="button primary">Speichern</button></div></form>
+{% endblock %}

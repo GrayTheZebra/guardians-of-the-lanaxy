@@ -1,0 +1,643 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <h1>Dashboard</h1>
+        <p>Der aktuelle Zustand deiner LANaxy-Installation auf einen Blick</p>
+    </div>
+    <div class="heading-actions">
+        <button class="button" id="dashboard-edit-toggle" type="button">
+            Dashboard bearbeiten
+        </button>
+        <a class="button" href="{{ url_for('system_page') }}">System</a>
+        <a class="button primary" href="{{ url_for('guardian_management') }}">
+            Guardians öffnen
+        </a>
+    </div>
+</section>
+
+<section class="dashboard-readiness {{ 'is-ready' if dashboard_health.readiness == 'ready' else 'has-warning' }}">
+  <div>
+    <span class="dashboard-readiness-icon"><svg><use href="#icon-{{ 'check' if dashboard_health.readiness == 'ready' else 'warning' }}"/></svg></span>
+    <div>
+      <strong>{{ 'System bereit' if dashboard_health.readiness == 'ready' else 'System benötigt Aufmerksamkeit' }}</strong>
+      <p>
+        {% for check in dashboard_health.checks if not check.ok %}
+          {{ check.label }}: {{ check.message }}{% if not loop.last %} · {% endif %}
+        {% else %}
+          Dienste, Datenbank, Backup und MiniGuards sind einsatzbereit.
+        {% endfor %}
+      </p>
+    </div>
+  </div>
+  <a class="button" href="{{ url_for('system_page') }}">System prüfen</a>
+</section>
+
+<section class="dashboard-editor" id="dashboard-editor" hidden>
+    <div class="dashboard-editor-heading">
+        <div>
+            <h2>Dashboard bearbeiten</h2>
+            <p>Widgets verschieben, vergrößern, entfernen oder hinzufügen.</p>
+        </div>
+        <div class="dashboard-editor-actions">
+            <button class="button primary" id="dashboard-save" type="button">
+                Änderungen speichern
+            </button>
+            <form method="post"
+                  action="{{ url_for('dashboard_layout_reset') }}"
+                  onsubmit="return confirm('Standardlayout wiederherstellen?')">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="button" type="submit">Zurücksetzen</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="dashboard-widget-picker">
+        <label>
+            <span>Widget</span>
+            <select id="widget-type">
+                {% for widget_type, metadata in widget_catalog.items() %}
+                <option value="{{ widget_type }}">
+                    {{ metadata.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label id="widget-target-field" hidden>
+            <span>Ziel</span>
+            <select id="widget-target"></select>
+        </label>
+        <label id="widget-title-field" hidden>
+            <span>Überschrift</span>
+            <input id="widget-title" maxlength="100">
+        </label>
+        <label id="widget-content-field" hidden>
+            <span>Text</span>
+            <input id="widget-content" maxlength="2000">
+        </label>
+        <button class="button" id="widget-add" type="button">
+            + Widget hinzufügen
+        </button>
+    </div>
+</section>
+
+<section class="dashboard-widget-grid" id="dashboard-widget-grid">
+{% for widget in dashboard_layout %}
+    <article class="dashboard-widget widget-size-{{ widget.size }}"
+             data-widget-id="{{ widget.id }}"
+             data-widget-type="{{ widget.type }}"
+             data-widget-size="{{ widget.size }}"
+             data-widget-target="{{ widget.get('target', '') }}"
+             data-widget-title="{{ widget.get('title', '') }}"
+             data-widget-content="{{ widget.get('content', '') }}"
+             draggable="false">
+
+        <div class="dashboard-widget-controls" hidden>
+            <button type="button" class="widget-drag" title="Verschieben">↕</button>
+            <button type="button" class="widget-size" title="Größe ändern">Größe</button>
+            <button type="button" class="widget-remove" title="Entfernen">×</button>
+        </div>
+
+        {% if widget.type == "platform_status" %}
+        <div class="dashboard-status-grid">
+            <a class="dashboard-status-card {{ 'has-problem' if problem_guardians else 'is-ok' }}"
+               href="{{ url_for('guardian_management') }}">
+                <span class="dashboard-status-icon">
+                    <svg><use href="#icon-shield"/></svg>
+                </span>
+                <div>
+                    <small>Guardians</small>
+                    <strong>{{ active_guardian_count }}</strong>
+                    <span>{{ problem_guardians|length }} mit Problem</span>
+                </div>
+            </a>
+            <a class="dashboard-status-card {{ 'has-problem' if beacon_error_count else 'is-ok' }}"
+               href="{{ url_for('beacons_page') }}">
+                <span class="dashboard-status-icon">B</span>
+                <div>
+                    <small>Beacons</small>
+                    <strong>{{ active_beacon_count }}</strong>
+                    <span>{{ beacon_error_count }} mit Fehler</span>
+                </div>
+            </a>
+            <a class="dashboard-status-card {{ 'has-problem' if portal_error_count else 'is-ok' }}"
+               href="{{ url_for('portals_page') }}">
+                <span class="dashboard-status-icon">P</span>
+                <div>
+                    <small>Portals</small>
+                    <strong>{{ active_portal_count }}</strong>
+                    <span>{{ portal_error_count }} nicht bereit</span>
+                </div>
+            </a>
+            <a class="dashboard-status-card is-neutral"
+               href="{{ url_for('rules_page') }}">
+                <span class="dashboard-status-icon">R</span>
+                <div>
+                    <small>Rules</small>
+                    <strong>{{ active_rule_count }}</strong>
+                    <span>{{ paused_rule_count }} pausiert</span>
+                </div>
+            </a>
+        </div>
+
+        {% elif widget.type == "problems" %}
+        <div class="dashboard-panel dashboard-problems">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h2>Aktuelle Probleme</h2>
+                    <p>Guardians, die Aufmerksamkeit benötigen</p>
+                </div>
+                <a href="{{ url_for('guardian_management') }}">Alle Guardians</a>
+            </div>
+            <div class="compact-problem-list">
+            {% for item in problem_guardians %}
+                <a href="{{ url_for('guardian_detail', check_id=item.check.id) }}"
+                   class="compact-problem-item level-{{ item.state.get('level', 0) }}">
+                    <span class="compact-status-dot"></span>
+                    <div>
+                        <strong>{{ item.check.name }}</strong>
+                        <small>{{ item.state.get('message', 'Kein Detail verfügbar') }}</small>
+                    </div>
+                    <time data-lanaxy-datetime="{{ item.state.get('last_check', '—') }}">{{ item.state.get('last_check', '—') }}</time>
+                </a>
+            {% else %}
+                <div class="dashboard-empty-state">
+                    <span>✓</span>
+                    <div>
+                        <strong>Alles in Ordnung</strong>
+                        <p>Aktuell meldet kein Guardian ein Problem.</p>
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+
+        {% elif widget.type == "runtime" %}
+        <div class="dashboard-panel dashboard-runtime">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h2>Runtime Control</h2>
+                    <p>Temporäre Zustände der Control Engine</p>
+                </div>
+                <a href="{{ url_for('system_page') }}#control">Verwalten</a>
+            </div>
+            <div class="runtime-state-list">
+                <form method="post"
+                      action="{{ url_for('dashboard_control_mute') }}"
+                      class="runtime-state-action {{ 'active' if mute_active else '' }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">
+                        <span>Global stumm</span>
+                        <strong>{{ 'Aktiv – aufheben' if mute_active else 'Aus – aktivieren' }}</strong>
+                    </button>
+                </form>
+
+                {% if maintenance_items %}
+                    {% for maintenance in maintenance_items %}
+                    <a class="runtime-state-action active"
+                       href="{{ url_for('guardian_detail', check_id=maintenance.id) }}#maintenance">
+                        <span>
+                            Wartung:
+                            <b>{{ maintenance.name }}</b>
+                            {% if maintenance.until %}
+                            <small>bis {{ maintenance.until|replace('T', ' ') }}</small>
+                            {% endif %}
+                        </span>
+                        <strong>Details</strong>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="runtime-state-action">
+                        <span>Wartungen</span>
+                        <strong>0</strong>
+                    </div>
+                {% endif %}
+
+                <a class="runtime-state-action {{ 'active' if paused_rule_count else '' }}"
+                   href="{{ url_for('rules_page') }}">
+                    <span>Pausierte Rules</span>
+                    <strong>{{ paused_rule_count }}</strong>
+                </a>
+
+                <div class="runtime-state-action">
+                    <span>Letzte Prüfung</span>
+                    <strong id="dashboard-last-check" data-lanaxy-datetime="{{ last_check }}">{{ last_check }}</strong>
+                </div>
+            </div>
+        </div>
+
+        {% elif widget.type == "incidents" %}
+        <div class="dashboard-panel">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h2>Offene Incidents</h2>
+                    <p>Aktive Ausfälle und Quittierungen</p>
+                </div>
+                <a href="{{ url_for('incidents_page', status='open') }}">Alle Incidents</a>
+            </div>
+            <div class="dashboard-compact-list">
+            {% for incident in open_incidents %}
+                <a href="{{ url_for('incident_detail', incident_id=incident.id) }}">
+                    <span class="compact-status-dot {{ 'error' if incident.severity == 'critical' else '' }}"></span>
+                    <div>
+                        <strong>{{ incident.guardian_name or incident.guardian_id }}</strong>
+                        <small>{{ incident.message }}</small>
+                    </div>
+                    <b>{{ 'Quittiert' if incident.acknowledged_at else 'Offen' }}</b>
+                </a>
+            {% else %}
+                <div class="dashboard-empty-state compact">
+                    <div><strong>Keine offenen Incidents</strong><p>Aktuell ist kein Ausfall aktiv.</p></div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+
+        {% elif widget.type == "events" %}
+        <div class="dashboard-panel dashboard-events">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h2>Letzte Ereignisse</h2>
+                    <p>Statuswechsel, Prüfungen und Systemmeldungen</p>
+                </div>
+                <a href="{{ url_for('protocol') }}">Komplettes Protokoll</a>
+            </div>
+            <div class="dashboard-event-list">
+            {% for event in latest_events %}
+                <a href="{{ url_for('protocol', guardian_id=event.get('guardian_id', '')) }}"
+                   class="dashboard-event-item">
+                    <span class="event-level level-{{ event.get('level', 0) }}"></span>
+                    <div>
+                        <strong>{{ event.get('guardian_name') or event.get('source') or event.get('event_type') or 'LANaxy' }}</strong>
+                        <small>{{ event.get('message', 'Ereignis') }}</small>
+                    </div>
+                    <time>{{ event.get('timestamp', '—')|replace('T', ' ') }}</time>
+                </a>
+            {% else %}
+                <div class="dashboard-empty-state compact">
+                    <div>
+                        <strong>Noch keine Ereignisse</strong>
+                        <p>Das Protokoll ist aktuell leer.</p>
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+
+        {% elif widget.type == "system_health" %}
+        <a class="dashboard-panel dashboard-health dashboard-panel-link"
+           href="{{ url_for('system_page') }}">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h2>Systemgesundheit</h2>
+                    <p>Zusammenfassung der wichtigsten Komponenten</p>
+                </div>
+                <span class="dashboard-panel-link-label">System öffnen</span>
+            </div>
+            <div class="health-overview">
+                <div class="health-score-large {{ 'has-problem' if problem_guardians else '' }}">
+                    <strong>{{ ok_guardian_count }}/{{ active_guardian_count }}</strong>
+                    <span>Guardians OK</span>
+                </div>
+                <dl>
+                    <div><dt>Beacon-Fehler</dt><dd>{{ beacon_error_count }}</dd></div>
+                    <div><dt>Portal-Probleme</dt><dd>{{ portal_error_count }}</dd></div>
+                    <div><dt>Aktive Rules</dt><dd>{{ active_rule_count }}</dd></div>
+                    <div><dt>Wartungen</dt><dd>{{ maintenance_count }}</dd></div>
+                </dl>
+            </div>
+        </a>
+
+        {% elif widget.type == "beacons" %}
+        <div class="dashboard-panel">
+            <div class="dashboard-panel-heading">
+                <div><h2>Beacons</h2><p>Versandkanäle und letzter Zustand</p></div>
+                <a href="{{ url_for('beacons_page') }}">Öffnen</a>
+            </div>
+            <div class="dashboard-compact-list">
+            {% for channel in channels %}
+                {% set status = beacon_status.get(channel.id, {}) %}
+                <a href="{{ url_for('notification_channel_edit', channel_id=channel.id) }}">
+                    <span class="compact-status-dot {{ 'error' if status.get('last_error') else 'ok' }}"></span>
+                    <div>
+                        <strong>{{ channel.name }}</strong>
+                        <small>{{ beacon_catalog.get(channel.type, {}).get('name', channel.type) }}</small>
+                    </div>
+                    <b>{{ 'Fehler' if status.get('last_error') else ('Aktiv' if channel.get('enabled', true) else 'Aus') }}</b>
+                </a>
+            {% else %}
+                <div class="dashboard-empty-state compact"><div><strong>Keine Beacons</strong></div></div>
+            {% endfor %}
+            </div>
+        </div>
+
+        {% elif widget.type == "portals" %}
+        <div class="dashboard-panel">
+            <div class="dashboard-panel-heading">
+                <div><h2>Portals</h2><p>Verbindungen zur Control Engine</p></div>
+                <a href="{{ url_for('portals_page') }}">Öffnen</a>
+            </div>
+            <div class="dashboard-compact-list">
+            {% for portal in portal_items %}
+                {% set status = portal_runtime.get(portal.id, {}) %}
+                <a href="{{ url_for('portal_edit', portal_id=portal.id) }}">
+                    <span class="compact-status-dot {{ 'ok' if status.get('running') else 'error' }}"></span>
+                    <div>
+                        <strong>{{ portal.name }}</strong>
+                        <small>{{ portal_catalog.get(portal.type, {}).get('name', portal.type) }}</small>
+                    </div>
+                    <b>{{ 'Bereit' if status.get('running') else 'Nicht bereit' }}</b>
+                </a>
+            {% else %}
+                <div class="dashboard-empty-state compact"><div><strong>Keine Portals</strong></div></div>
+            {% endfor %}
+            </div>
+        </div>
+
+        {% elif widget.type == "rules" %}
+        <div class="dashboard-panel">
+            <div class="dashboard-panel-heading">
+                <div><h2>Rules</h2><p>Aktive Benachrichtigungsregeln</p></div>
+                <a href="{{ url_for('rules_page') }}">Öffnen</a>
+            </div>
+            <div class="dashboard-compact-list">
+            {% for rule in rules %}
+                <a href="{{ url_for('notification_rule_form', rule_id=rule.id) }}">
+                    <span class="compact-status-dot {{ 'ok' if rule.get('enabled', true) else '' }}"></span>
+                    <div>
+                        <strong>{{ rule.name }}</strong>
+                        <small>{{ rule.get('statuses', [])|join(', ') }}</small>
+                    </div>
+                    <b>{{ 'Aktiv' if rule.get('enabled', true) else 'Aus' }}</b>
+                </a>
+            {% else %}
+                <div class="dashboard-empty-state compact"><div><strong>Keine Rules</strong></div></div>
+            {% endfor %}
+            </div>
+        </div>
+
+        {% elif widget.type == "guardian" %}
+            {% set selected = guardians|selectattr('check.id', 'equalto', widget.get('target'))|list|first %}
+            {% if selected %}
+            <a class="dashboard-panel dashboard-guardian-widget"
+               href="{{ url_for('guardian_detail', check_id=selected.check.id) }}">
+                <div class="dashboard-panel-heading">
+                    <div>
+                        <h2>{{ selected.check.name }}</h2>
+                        <p>{{ selected.metadata.get('name', selected.check.guardian) }}</p>
+                    </div>
+                    <span class="status-badge">{{ selected.state.get('status', 'unknown') }}</span>
+                </div>
+                <p>{{ selected.state.get('message', 'Noch kein Prüfergebnis vorhanden.') }}</p>
+                <dl>
+                    <div><dt>Letzte Prüfung</dt><dd data-lanaxy-datetime="{{ selected.state.get('last_check', '—') }}">{{ selected.state.get('last_check', '—') }}</dd></div>
+                    <div><dt>Antwortzeit</dt><dd>{{ selected.state.get('response_time', selected.state.get('details', {}).get('response_time', '—')) }} ms</dd></div>
+                    <div><dt>Verfügbarkeit</dt><dd>{{ selected.state.get('uptime', '—') }} %</dd></div>
+                </dl>
+            </a>
+            {% else %}
+            <div class="dashboard-panel"><h2>Guardian nicht gefunden</h2></div>
+            {% endif %}
+
+        {% elif widget.type == "guardian_group" %}
+            {% set group_items = guardian_groups.get(widget.get('target'), []) %}
+            <div class="dashboard-panel">
+                <div class="dashboard-panel-heading">
+                    <div>
+                        <h2>{{ widget.get('target', 'Guardian-Gruppe') }}</h2>
+                        <p>{{ group_items|length }} Guardians</p>
+                    </div>
+                    <a href="{{ url_for('guardian_management') }}">Öffnen</a>
+                </div>
+                <div class="dashboard-compact-list">
+                {% for item in group_items %}
+                    <a href="{{ url_for('guardian_detail', check_id=item.check.id) }}">
+                        <span class="compact-status-dot level-{{ item.state.get('level', 0) }}"></span>
+                        <div>
+                            <strong>{{ item.check.name }}</strong>
+                            <small>{{ item.state.get('message', 'Kein Ergebnis') }}</small>
+                        </div>
+                        <b>{{ item.state.get('status', 'unknown') }}</b>
+                    </a>
+                {% else %}
+                    <div class="dashboard-empty-state compact"><div><strong>Gruppe ist leer</strong></div></div>
+                {% endfor %}
+                </div>
+            </div>
+
+        {% elif widget.type == "text" %}
+        <div class="dashboard-panel dashboard-text-widget">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h2>{{ widget.get('title', 'Eigener Text') }}</h2>
+                </div>
+            </div>
+            <p>{{ widget.get('content', '') }}</p>
+        </div>
+        {% endif %}
+    </article>
+{% endfor %}
+</section>
+
+<script>
+const csrfToken = {{ csrf_token()|tojson }};
+const widgetCatalog = {{ widget_catalog|tojson }};
+const guardianTargets = {{ guardians|map(attribute='check')|list|tojson }};
+const groupTargets = {{ guardian_groups.keys()|list|tojson }};
+const grid = document.getElementById("dashboard-widget-grid");
+const editor = document.getElementById("dashboard-editor");
+const editToggle = document.getElementById("dashboard-edit-toggle");
+const controls = () => document.querySelectorAll(".dashboard-widget-controls");
+let editMode = false;
+let draggedWidget = null;
+
+function setEditMode(enabled) {
+    const wasEditing = editMode;
+    editMode = enabled;
+    editor.hidden = !enabled;
+    grid.classList.toggle("is-editing", enabled);
+    controls().forEach((control) => {
+        control.hidden = !enabled;
+    });
+    document.querySelectorAll(".dashboard-widget").forEach((widget) => {
+        widget.draggable = enabled;
+    });
+    editToggle.textContent = enabled
+        ? "Bearbeitung schließen"
+        : "Dashboard bearbeiten";
+
+    // Closing edit mode reloads the rendered widgets. This also discards
+    // unsaved temporary changes and replaces saved placeholders immediately.
+    if (wasEditing && !enabled) {
+        window.location.reload();
+    }
+}
+
+editToggle.addEventListener("click", () => setEditMode(!editMode));
+
+function widgetData() {
+    return [...document.querySelectorAll(".dashboard-widget")].map((widget) => ({
+        id: widget.dataset.widgetId,
+        type: widget.dataset.widgetType,
+        size: widget.dataset.widgetSize,
+        target: widget.dataset.widgetTarget || "",
+        title: widget.dataset.widgetTitle || "",
+        content: widget.dataset.widgetContent || "",
+    }));
+}
+
+document.getElementById("dashboard-save").addEventListener("click", async () => {
+    try {
+        const response = await fetch({{ url_for('dashboard_layout_save')|tojson }}, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": csrfToken,
+            },
+            body: JSON.stringify({widgets: widgetData()}),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || "Speichern fehlgeschlagen.");
+        }
+        window.showToast("Dashboard gespeichert.", "success");
+        window.location.reload();
+    } catch (error) {
+        window.showToast(error.message, "error");
+    }
+});
+
+grid.addEventListener("dragstart", (event) => {
+    draggedWidget = event.target.closest(".dashboard-widget");
+    if (!draggedWidget || !editMode) {
+        event.preventDefault();
+        return;
+    }
+    draggedWidget.classList.add("is-dragging");
+});
+
+grid.addEventListener("dragend", () => {
+    draggedWidget?.classList.remove("is-dragging");
+    draggedWidget = null;
+});
+
+grid.addEventListener("dragover", (event) => {
+    if (!draggedWidget) return;
+    event.preventDefault();
+    const target = event.target.closest(".dashboard-widget");
+    if (!target || target === draggedWidget) return;
+    const rect = target.getBoundingClientRect();
+    const before = event.clientY < rect.top + rect.height / 2;
+    grid.insertBefore(draggedWidget, before ? target : target.nextSibling);
+});
+
+const sizeOrder = ["small", "normal", "wide", "full"];
+grid.addEventListener("click", (event) => {
+    const widget = event.target.closest(".dashboard-widget");
+    if (!widget || !editMode) return;
+
+    if (event.target.closest(".widget-remove")) {
+        widget.remove();
+        return;
+    }
+
+    if (event.target.closest(".widget-size")) {
+        const index = sizeOrder.indexOf(widget.dataset.widgetSize);
+        const next = sizeOrder[(index + 1) % sizeOrder.length];
+        sizeOrder.forEach((size) => widget.classList.remove(`widget-size-${size}`));
+        widget.dataset.widgetSize = next;
+        widget.classList.add(`widget-size-${next}`);
+    }
+});
+
+const typeSelect = document.getElementById("widget-type");
+const targetField = document.getElementById("widget-target-field");
+const targetSelect = document.getElementById("widget-target");
+const titleField = document.getElementById("widget-title-field");
+const contentField = document.getElementById("widget-content-field");
+
+function updateWidgetFields() {
+    const type = typeSelect.value;
+    const metadata = widgetCatalog[type];
+    targetField.hidden = !metadata.requires_target;
+    titleField.hidden = type !== "text";
+    contentField.hidden = type !== "text";
+
+    targetSelect.innerHTML = "";
+    if (type === "guardian") {
+        guardianTargets.forEach((guardian) => {
+            const option = document.createElement("option");
+            option.value = guardian.id;
+            option.textContent = guardian.name;
+            targetSelect.appendChild(option);
+        });
+    } else if (type === "guardian_group") {
+        groupTargets.forEach((group) => {
+            const option = document.createElement("option");
+            option.value = group;
+            option.textContent = group;
+            targetSelect.appendChild(option);
+        });
+    }
+}
+
+typeSelect.addEventListener("change", updateWidgetFields);
+updateWidgetFields();
+
+document.getElementById("widget-add").addEventListener("click", () => {
+    const type = typeSelect.value;
+    const metadata = widgetCatalog[type];
+
+    if (metadata.singleton && document.querySelector(`[data-widget-type="${type}"]`)) {
+        window.showToast("Dieses Widget ist bereits vorhanden.", "error");
+        return;
+    }
+
+    const target = targetSelect.value || "";
+    if (metadata.requires_target && !target) {
+        window.showToast("Bitte ein Ziel auswählen.", "error");
+        return;
+    }
+
+    const usedIds = new Set(widgetData().map((item) => item.id));
+    let counter = 1;
+    while (usedIds.has(`${type}_${counter}`)) counter += 1;
+
+    const widget = document.createElement("article");
+    widget.className = `dashboard-widget widget-size-${metadata.default_size} dashboard-widget-placeholder`;
+    widget.dataset.widgetId = `${type}_${counter}`;
+    widget.dataset.widgetType = type;
+    widget.dataset.widgetSize = metadata.default_size;
+    widget.dataset.widgetTarget = target;
+    widget.dataset.widgetTitle = document.getElementById("widget-title").value.trim();
+    widget.dataset.widgetContent = document.getElementById("widget-content").value.trim();
+    widget.draggable = true;
+    widget.innerHTML = `
+        <div class="dashboard-widget-controls">
+            <button type="button" class="widget-drag">↕</button>
+            <button type="button" class="widget-size">Größe</button>
+            <button type="button" class="widget-remove">×</button>
+        </div>
+        <div class="dashboard-panel">
+            <h2>${metadata.name}</h2>
+            <p>Das neue Widget erscheint nach dem Speichern vollständig.</p>
+        </div>
+    `;
+    grid.appendChild(widget);
+    window.showToast("Widget hinzugefügt. Jetzt speichern.", "success");
+});
+
+const dashboardLastCheck = document.getElementById("dashboard-last-check");
+if (dashboardLastCheck && dashboardLastCheck.textContent.trim() !== "—") {
+    const date = new Date(dashboardLastCheck.textContent.trim());
+    if (!Number.isNaN(date.getTime())) {
+        dashboardLastCheck.textContent = window.LANaxyDateTime.format(date, "datetime");
+    }
+}
+if (document.getElementById("sidebar-last-check")) {
+    document.getElementById("sidebar-last-check").textContent =
+        dashboardLastCheck?.textContent || "—";
+}
+</script>
+{% endblock %}

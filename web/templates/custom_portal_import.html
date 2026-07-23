@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Custom Portal importieren · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <h1>Custom Portal importieren</h1>
+        <p>ZIP-Paket oder Legacy-Python-Datei laden, prüfen und installieren</p>
+    </div>
+</section>
+
+<div class="security-warning">
+    <strong>Warnung:</strong>
+    Custom Portals sind ausführbarer Python-Code und laufen mit den Rechten
+    des LANaxy-Dienstes. Installiere ausschließlich vertrauenswürdigen Code.
+</div>
+
+<form method="post" class="config-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-grid">
+        <label class="field">
+            <span>Modulname *</span>
+            <input id="module-name"
+                   name="module_name"
+                   pattern="[a-z][a-z0-9_]*"
+                   placeholder="ntfy"
+                   required>
+            <small class="field-hint">
+                Nur Kleinbuchstaben, Zahlen und Unterstriche.
+            </small>
+        </label>
+
+        <label class="field">
+            <span>Plugin-Paket oder Python-Datei laden</span>
+            <input id="portal-file"
+                   type="file"
+                   accept=".zip,application/zip,.py,text/x-python,text/plain">
+            <small class="field-hint">
+                ZIP-Pakete laden Quellcode, Manifest, README und Sprachdateien in die Editoren. Legacy-Python-Dateien werden weiterhin unterstützt.
+            </small>
+        </label>
+    </div>
+
+    <label class="field source-editor">
+        <span>Quellcode</span>
+        <textarea id="portal-source"
+                  name="source"
+                  spellcheck="false"
+                  required>{{ template_source }}</textarea>
+    </label>
+
+    <div id="editor-status" class="editor-status">
+        Vorlage geladen. Du kannst sie bearbeiten oder eine Datei laden.
+    </div>
+
+
+    <input type="hidden" id="manifest-json" name="manifest_json" value="">
+    <label class="field source-editor package-readme">
+        <span>README.md</span>
+        <textarea id="readme-md" name="readme_md" spellcheck="false"></textarea>
+    </label>
+
+    <section class="translation-editors">
+        <h2>Translations</h2>
+        <p class="field-hint">
+            Optional JSON language files stored next to the Custom Portal.
+        </p>
+        <div class="form-grid">
+            <label class="field source-editor">
+                <span>Deutsch · de.json</span>
+                <textarea id="translation-de" name="translation_de" spellcheck="false">{
+  "name": "Mein Portal",
+  "description": "Deutsche Beschreibung",
+  "fields": {}
+}</textarea>
+            </label>
+            <label class="field source-editor">
+                <span>English · en.json</span>
+                <textarea id="translation-en" name="translation_en" spellcheck="false">{
+  "name": "My Portal",
+  "description": "English description",
+  "fields": {}
+}</textarea>
+            </label>
+        </div>
+    </section>
+
+    <label class="checkbox-row">
+        <input type="checkbox" name="overwrite" value="1">
+        <span>Vorhandenen Custom Portal überschreiben</span>
+    </label>
+
+    <div class="form-actions">
+        <button class="button primary" type="submit">
+            Prüfen und installieren
+        </button>
+        <a class="button" href="{{ url_for('portal_management') }}">Abbrechen</a>
+    </div>
+</form>
+
+<script>
+const moduleName = document.getElementById("module-name");
+const fileInput = document.getElementById("portal-file");
+const editor = document.getElementById("portal-source");
+const status = document.getElementById("editor-status");
+
+function normalize(value) {
+    return value
+        .toLowerCase()
+        .replaceAll("ä", "ae")
+        .replaceAll("ö", "oe")
+        .replaceAll("ü", "ue")
+        .replaceAll("ß", "ss")
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+/, "");
+}
+
+moduleName.addEventListener("input", () => {
+    moduleName.value = normalize(moduleName.value);
+});
+
+fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    try {
+        if (file.name.toLowerCase().endsWith(".zip")) {
+            const formData = new FormData();
+            formData.append("_csrf_token", {{ csrf_token()|tojson }});
+            formData.append("package", file);
+
+            const response = await fetch(
+                {{ url_for("plugin_package_preview", plugin_type="portal")|tojson }},
+                { method: "POST", body: formData }
+            );
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                throw new Error(data.error || "Paket konnte nicht gelesen werden.");
+            }
+
+            moduleName.value = data.manifest.module;
+            editor.value = data.source;
+            document.getElementById("manifest-json").value =
+                JSON.stringify(data.manifest);
+            document.getElementById("readme-md").value = data.readme || "";
+            document.getElementById("translation-de").value =
+                JSON.stringify(data.translations.de || {}, null, 2);
+            document.getElementById("translation-en").value =
+                JSON.stringify(data.translations.en || {}, null, 2);
+            status.className = "editor-status success";
+            status.textContent =
+                `Paket „${file.name}“ wurde geladen und kann bearbeitet werden.`;
+        } else if (file.name.toLowerCase().endsWith(".py")) {
+            editor.value = await file.text();
+            moduleName.value =
+                normalize(file.name.replace(/\.py$/i, ""));
+            document.getElementById("manifest-json").value = "";
+            status.className = "editor-status success";
+            status.textContent =
+                `Legacy-Datei „${file.name}“ wurde geladen.`;
+        } else {
+            throw new Error("Bitte eine ZIP- oder Python-Datei auswählen.");
+        }
+    } catch (error) {
+        status.className = "editor-status error";
+        status.textContent = error.message;
+    }
+});
+
+editor.addEventListener("input", () => {
+    status.className = "editor-status";
+    status.textContent =
+        "Quellcode bearbeitet. Installiert wird der aktuelle Editorinhalt.";
+});
+</script>
+{% endblock %}

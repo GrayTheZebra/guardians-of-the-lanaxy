@@ -1,0 +1,38 @@
+{
+  "name": "E-Mail",
+  "description": "Sendet Benachrichtigungen über einen SMTP-Server.",
+  "category": "Nachrichten",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "smtp_host": {
+      "label": "SMTP-Server"
+    },
+    "smtp_port": {
+      "label": "SMTP-Port"
+    },
+    "encryption": {
+      "label": "Verschlüsselung"
+    },
+    "username": {
+      "label": "Benutzername"
+    },
+    "password": {
+      "label": "Passwort"
+    },
+    "sender": {
+      "label": "Absender"
+    },
+    "recipients": {
+      "label": "Empfänger",
+      "help": "Mehrere Adressen durch Komma trennen."
+    },
+    "subject_prefix": {
+      "label": "Betreff-Präfix"
+    },
+    "timeout": {
+      "label": "Timeout (Sekunden)"
+    }
+  }
+}

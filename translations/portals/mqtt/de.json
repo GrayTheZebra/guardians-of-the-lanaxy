@@ -1,0 +1,5 @@
+{
+  "name": "MQTT",
+  "description": "Empfängt Control-Befehle über MQTT.",
+  "fields": {}
+}

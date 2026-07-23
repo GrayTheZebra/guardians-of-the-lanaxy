@@ -1,0 +1,35 @@
+{
+  "name": "Webhook",
+  "description": "Sendet Ereignisse als JSON per HTTP.",
+  "category": "Entwickler",
+  "fields": {
+    "name": {
+      "label": "Name",
+      "help": "Interner Anzeigename des Beacons, zum Beispiel „ioBroker Webhook“ oder „n8n Alarmierung“."
+    },
+    "url": {
+      "label": "URL",
+      "help": "Vollständige Zieladresse, an die LANaxy den JSON-Body sendet, zum Beispiel http://192.168.0.50:1880/lanaxy."
+    },
+    "method": {
+      "label": "Methode",
+      "help": "HTTP-Methode des Zielsystems. Für neue Webhooks ist POST normalerweise die richtige Wahl."
+    },
+    "bearer_token": {
+      "label": "Bearer-Token",
+      "help": "Optional. Wird als Header „Authorization: Bearer …“ gesendet. Leer lassen, wenn das Ziel keine Bearer-Authentifizierung nutzt."
+    },
+    "headers": {
+      "label": "Zusätzliche Header",
+      "help": "Optional, ein Header pro Zeile. Beispiel: X-API-Key: geheim. Content-Type und User-Agent setzt LANaxy automatisch."
+    },
+    "timeout": {
+      "label": "Timeout (Sekunden)",
+      "help": "Maximale Wartezeit auf die Antwort des Zielsystems. Werte zwischen 5 und 15 Sekunden sind meist sinnvoll."
+    },
+    "verify_tls": {
+      "label": "TLS-Zertifikat prüfen",
+      "help": "Bei HTTPS wird das Zertifikat geprüft. Nur für interne Ziele mit bewusst selbstsigniertem Zertifikat deaktivieren."
+    }
+  }
+}

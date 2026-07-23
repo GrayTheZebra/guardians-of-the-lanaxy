@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% from "_launchpad_progress.html" import launchpad_progress %}
+{% block title %}{{ title }} · Launchpad{% endblock %}
+{% block content %}
+{{ launchpad_progress(step_number) }}
+
+<section class="launchpad-heading">
+    <div>
+        <p class="eyebrow">Launchpad · Konfiguration</p>
+        <h1>{{ title }}</h1>
+        <p>{{ subtitle }}</p>
+    </div>
+</section>
+
+<section class="launchpad-explanation">
+    <span class="launchpad-explanation-icon">?</span>
+    <div>
+        {% if extra_kind == 'guardian' %}
+            <h2>Guardian konfigurieren</h2>
+            <p>
+                Hier legst du fest, welches System geprüft wird und wie LANaxy
+                es erreicht. Pflichtfelder sind mit einem Stern markiert. Fahre
+                mit der Maus über ein Fragezeichen oder fokussiere es mit der
+                Tastatur, um eine Erklärung zum jeweiligen Feld zu sehen.
+            </p>
+        {% elif extra_kind == 'beacon' %}
+            <h2>Beacon konfigurieren</h2>
+            <p>
+                Ein Beacon verschickt Meldungen. Trage hier die Zugangsdaten und
+                das gewünschte Ziel ein. Du kannst den Beacon später im normalen
+                Beacon-Bereich testen und weiter anpassen.
+            </p>
+        {% else %}
+            <h2>Komponente konfigurieren</h2>
+            <p>
+                Trage die Verbindungsdaten für diese Komponente ein. Die
+                Fragezeichen erklären, wofür jedes Feld verwendet wird.
+            </p>
+        {% endif %}
+    </div>
+</section>
+
+<form class="config-form launchpad-form" method="post">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-grid">
+    {% for key, field in schema.items() if key != 'device_id' %}
+        {% set current = values.get(key, field.get('default', '')) %}
+        {% set visible = field.get('visible_if') %}
+        <label class="field"
+               data-visible-field="{{ visible.field if visible else '' }}"
+               data-visible-value="{{ visible.equals if visible and visible.get('equals') is not none else '' }}"
+               data-visible-values="{{ visible.get('in', [])|join('|') if visible else '' }}">
+            <span class="field-label-with-help">
+                <span>
+                    {% if extra_kind == 'guardian' and key == 'id' %}
+                        Guardian-ID
+                    {% else %}
+                        {{ field.label }}
+                    {% endif %}
+                    {% if field.required and key != 'id' %} *{% endif %}
+                </span>
+                <button
+                    class="field-help"
+                    type="button"
+                    aria-label="Hilfe zu {{ field.label }}"
+                    data-tooltip="{{ field.launchpad_help }}"
+                >?</button>
+            </span>
+
+            {% if field.type == 'select' %}
+                <select name="{{ key }}" {% if field.required and key != 'id' %}required{% endif %}>
+                    {% for option in field.options %}
+                    <option value="{{ option.value }}"
+                            {% if current == option.value %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            {% elif field.type == 'checkbox' %}
+                <input type="checkbox" name="{{ key }}" value="1"
+                       {% if current in [true, 1, '1', 'true', 'on'] %}checked{% endif %}>
+            {% elif field.type == 'textarea' %}
+                <textarea name="{{ key }}" rows="5"
+                          {% if field.required %}required{% endif %}>{{ current }}</textarea>
+            {% else %}
+                <input
+                    type="{{ 'text' if field.type in ['slug', 'url'] else ('password' if field.secret else field.type) }}"
+                    name="{{ key }}"
+                    value="{{ current }}"
+                    {% if field.required and key != 'id' %}required{% endif %}
+                    {% if field.get('min') is not none %}min="{{ field.min }}"{% endif %}
+                    autocomplete="{{ 'new-password' if field.secret else 'off' }}"
+                >
+            {% endif %}
+            {% if field.help %}<small class="field-hint">{{ field.help }}</small>{% endif %}
+            {% if field.get('hint') %}<small class="field-hint">{{ field.hint }}</small>{% endif %}
+            {% if field.get('help_url') %}
+                <small class="field-hint"><a href="{{ field.help_url }}" target="_blank" rel="noopener noreferrer">{{ field.get('help_url_label', 'Dokumentation öffnen') }}</a></small>
+            {% endif %}
+        </label>
+    {% endfor %}
+    </div>
+
+    {% if extra_kind == 'guardian' %}
+    <section class="generic-settings">
+        <h2>Organisation</h2>
+        <div class="form-grid">
+            <label class="field">
+                <span class="field-label-with-help">
+                    <span>Gruppe</span>
+                    <button class="field-help" type="button"
+                            aria-label="Hilfe zur Gruppe"
+                            data-tooltip="Optionale organisatorische Gruppe. Sie erleichtert Filter und Übersichten, verändert aber nicht die eigentliche Prüfung.">?</button>
+                </span>
+                <input name="group" value="{{ values.get('group', '') }}"
+                       list="launchpad-groups"
+                       placeholder="zum Beispiel Smart Home">
+                <datalist id="launchpad-groups">
+                    {% for group in groups %}<option value="{{ group }}">{% endfor %}
+                </datalist>
+            </label>
+        </div>
+    </section>
+    {% endif %}
+
+    <label class="toggle-row">
+        <input type="checkbox" name="enabled" value="1"
+               {% if values.get('enabled', '1') in [true, 1, '1', 'true', 'on'] %}checked{% endif %}>
+        {{ 'Guardian' if extra_kind == 'guardian' else ('Beacon' if extra_kind == 'beacon' else 'Portal') }} aktiv
+    </label>
+
+    <div class="form-actions">
+        <a class="button" href="{{ back_url }}">Zurück</a>
+        <button class="button primary" type="submit">{{ submit_label }}</button>
+    </div>
+</form>
+
+<script>
+function updateLaunchpadConditionalFields() {
+    document.querySelectorAll("[data-visible-field]").forEach((element) => {
+        const fieldName = element.dataset.visibleField;
+        if (!fieldName) return;
+        const controller = document.querySelector(`[name="${fieldName}"]`);
+        if (!controller) return;
+        const controllerValue = controller.type === 'checkbox'
+            ? (controller.checked ? '1' : '0')
+            : controller.value;
+        const allowedValues = element.dataset.visibleValues
+            ? element.dataset.visibleValues.split('|')
+            : [element.dataset.visibleValue];
+        const visible = allowedValues.includes(controllerValue);
+        element.hidden = !visible;
+        element.querySelectorAll("input, select, textarea").forEach((input) => {
+            input.disabled = !visible;
+        });
+    });
+}
+document.querySelectorAll("select, input[type=\"checkbox\"]").forEach((select) => {
+    select.addEventListener("change", updateLaunchpadConditionalFields);
+});
+updateLaunchpadConditionalFields();
+</script>
+{% endblock %}

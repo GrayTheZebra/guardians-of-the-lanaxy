@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "guardians": "Guardians",
+    "beacons": "Beacons",
+    "rules": "Rules",
+    "history": "History",
+    "protocol": "Log",
+    "system": "System",
+    "about": "About",
+    "portals": "Portals"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "duplicate": "Duplicate",
+    "enable": "Enable",
+    "disable": "Disable",
+    "test": "Test",
+    "active": "Active",
+    "inactive": "Inactive",
+    "success": "Success",
+    "error": "Error",
+    "loading": "Running …",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "beacons": {
+    "title": "Beacons",
+    "subtitle": "Notification targets for Guardian events",
+    "add": "Add Beacon",
+    "types": "Beacon types",
+    "form_add": "Add {name} Beacon",
+    "form_edit": "Edit {name} Beacon",
+    "enabled": "Beacon enabled",
+    "test_before_save": "Test without saving",
+    "test_success": "Test notification sent successfully.",
+    "test_failed": "Test failed: {error}",
+    "test_duration": "Delivery time: {duration} ms",
+    "validation_failed": "Please check all required fields.",
+    "chats_search": "Find chats",
+    "chat_search_running": "Searching …"
+  },
+  "rules": {
+    "title": "Rules",
+    "subtitle": "Rules decide which Guardian events are sent to which Beacons.",
+    "add": "Add Rule"
+  },
+  "system": {
+    "title": "System",
+    "subtitle": "LANaxy status and access protection",
+    "language": "Language",
+    "language_auto": "Automatic (browser)",
+    "language_saved": "Language saved.",
+    "access": "Access protection",
+    "enabled": "Enabled",
+    "username": "Username",
+    "new_password": "New password",
+    "confirm_password": "Confirm password",
+    "session_duration": "Session duration (minutes)",
+    "system_info": "System information",
+    "system_mqtt": "System MQTT",
+    "configure": "Configure"
+  },
+  "toast": {
+    "close": "Close"
+  },
+  "status": {
+    "active": "active",
+    "disabled": "disabled",
+    "error": "error",
+    "unknown": "unknown",
+    "maintenance": "maintenance",
+    "warning": "warning",
+    "critical": "critical",
+    "recovery": "recovered",
+    "ok": "OK"
+  },
+  "footer": "Made with ♥ for your smart home"
+}

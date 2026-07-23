@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Rule- und Beacon-Wege · {{ app_name }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="{{ url_for('guardian_management') }}">Guardians</a><span>Rule- und Beacon-Wege</span></nav>
+<section class="dashboard-heading">
+    <div>
+        <p class="eyebrow">Guardian-Abhängigkeiten</p>
+        <h1>Rule- und Beacon-Wege</h1>
+        <p>Alle Guardians mit den Rules und Beacons, über die Benachrichtigungen ausgelöst werden.</p>
+    </div>
+    <span class="dependency-count">{{ guardian_routes|length }} Guardians</span>
+</section>
+
+<section class="routing-overview-list">
+{% for item in guardian_routes %}
+    {% set check = item.check %}
+    {% set health = item.beacon_health %}
+    <article class="chart-card routing-overview-card {{ 'has-beacon-error' if health.none_reachable and health.total else '' }}">
+        <header class="routing-overview-header">
+            <div>
+                <span class="routing-node-kind">Guardian</span>
+                <h2><a href="{{ url_for('guardian_detail', check_id=check.id) }}">{{ check.name }}</a></h2>
+                <small>{{ check.id }}{% if check.get('group') %} · {{ check.group }}{% endif %}</small>
+            </div>
+            <div class="routing-overview-health">
+                {% if not check.get('enabled', true) %}
+                    <span class="routing-overview-badge is-disabled">Guardian deaktiviert</span>
+                {% elif health.coverage_state == 'critical' %}
+                    <span class="routing-overview-badge is-error">{{ health.coverage_message }}</span>
+                {% elif health.coverage_state == 'warning' %}
+                    <span class="routing-overview-badge is-warning">{{ health.coverage_message }}</span>
+                {% else %}
+                    <span class="routing-overview-badge is-ok">Alarm + OK möglich</span>
+                {% endif %}
+            </div>
+        </header>
+
+        {% if item.dependencies %}
+        <div class="routing-overview-rules">
+        {% for dependency in item.dependencies %}
+            <section class="routing-overview-rule {{ 'is-disabled' if not dependency.enabled }}">
+                <div class="routing-overview-rule-main">
+                    <span class="routing-node-kind">Rule</span>
+                    <strong>{{ dependency.name }}</strong>
+                    <small>{{ dependency.statuses|join(', ') or 'keine Statusauswahl' }}{% if dependency.delay_seconds %} · +{{ dependency.delay_seconds }} s{% endif %}</small>
+                    {% if not dependency.enabled %}<span class="routing-state">deaktiviert</span>{% endif %}
+                    {% if dependency.id %}<a href="{{ url_for('notification_rule_form', rule_id=dependency.id) }}">Rule öffnen</a>{% endif %}
+                </div>
+                <div class="routing-overview-beacons">
+                    {% for beacon in dependency.primary_beacons %}
+                    <div class="routing-overview-beacon {{ 'is-missing' if beacon.missing else ('is-error' if beacon.last_error else ('is-muted' if beacon.muted else ('is-disabled' if not beacon.enabled else 'is-ok'))) }}">
+                        <span class="routing-node-kind">Beacon</span>
+                        <strong>{{ beacon.name }}</strong>
+                        <small>{{ beacon.type }} · direkt</small>
+                        {% if beacon.missing %}<span class="routing-state">fehlt</span>{% elif beacon.last_error %}<span class="routing-state routing-state-error" title="{{ beacon.last_error }}">Fehler</span>{% elif beacon.muted %}<span class="routing-state">stumm</span>{% elif not beacon.enabled %}<span class="routing-state">deaktiviert</span>{% endif %}
+                    </div>
+                    {% endfor %}
+                    {% for escalation in dependency.escalation_groups %}
+                        {% for beacon in escalation.beacons %}
+                        <div class="routing-overview-beacon {{ 'is-missing' if beacon.missing else ('is-error' if beacon.last_error else ('is-muted' if beacon.muted else ('is-disabled' if not beacon.enabled else 'is-ok'))) }}">
+                            <span class="routing-node-kind">Eskalation {{ escalation.index }}</span>
+                            <strong>{{ beacon.name }}</strong>
+                            <small>{{ beacon.type }} · nach {{ escalation.after_minutes }} min</small>
+                            {% if beacon.missing %}<span class="routing-state">fehlt</span>{% elif beacon.last_error %}<span class="routing-state routing-state-error" title="{{ beacon.last_error }}">Fehler</span>{% elif beacon.muted %}<span class="routing-state">stumm</span>{% elif not beacon.enabled %}<span class="routing-state">deaktiviert</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                    {% endfor %}
+                    {% if not dependency.primary_beacons and not dependency.escalation_groups %}
+                    <div class="routing-overview-beacon is-missing"><strong>Keine Beacons zugeordnet</strong></div>
+                    {% endif %}
+                </div>
+            </section>
+        {% endfor %}
+        </div>
+        {% else %}
+        <div class="routing-overview-empty">Keine passende Rule und damit kein Benachrichtigungsweg vorhanden.</div>
+        {% endif %}
+    </article>
+{% else %}
+    <div class="routing-empty-state"><strong>Keine Guardians vorhanden</strong></div>
+{% endfor %}
+</section>
+{% endblock %}

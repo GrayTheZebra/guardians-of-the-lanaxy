@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% from "_launchpad_progress.html" import launchpad_progress %}
+{% block title %}Neue Rule · Launchpad{% endblock %}
+{% block content %}
+{{ launchpad_progress(3) }}
+
+<section class="launchpad-heading">
+    <div>
+        <p class="eyebrow">Launchpad · Rule</p>
+        <h1>Eigene Rule erstellen</h1>
+        <p>Lege fest, wann und wohin LANaxy Meldungen sendet.</p>
+    </div>
+</section>
+
+<section class="launchpad-explanation">
+    <span class="launchpad-explanation-icon">?</span>
+    <div>
+        <h2>Eigene Benachrichtigungslogik</h2>
+        <p>
+            In diesem Schritt bestimmst du genau, wann LANaxy eine Meldung
+            verschickt. Für die meisten Setups sind Warning, Critical und
+            Recovery ohne Verzögerung sinnvoll. Wiederholungen und Ruhezeiten
+            brauchst du nur, wenn du das Verhalten gezielt anpassen möchtest.
+        </p>
+    </div>
+</section>
+
+<form method="post" class="config-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-grid">
+        <label class="field">
+            <span class="field-label-with-help">
+                <span>Name *</span>
+                <button class="field-help" type="button"
+                        aria-label="Hilfe zum Rule-Namen"
+                        data-tooltip="Ein frei wählbarer Anzeigename für diese Benachrichtigungsregel.">?</button>
+            </span>
+            <input name="name" required
+                   value="{{ values.get('name', 'Launchpad Rule') }}">
+        </label>
+        <div class="field">
+            <span class="field-label-with-help">
+                <span>Status *</span>
+                <button class="field-help" type="button"
+                        aria-label="Hilfe zu Status"
+                        data-tooltip="Warning meldet Warnungen, Critical kritische Ausfälle und Recovery die Wiederherstellung nach einem Problem. Mehrfachauswahl ist möglich.">?</button>
+            </span>
+            {% set selected_statuses = values.get('statuses', ['warning','critical','recovery']) %}
+            {% if selected_statuses is string %}{% set selected_statuses = [selected_statuses] %}{% endif %}
+            <div class="multi-checkbox-grid multi-checkbox-grid--compact">
+                {% for status in ['warning','critical','recovery'] %}
+                <label class="multi-checkbox-option">
+                    <input type="checkbox" name="statuses" value="{{ status }}" {% if status in selected_statuses %}checked{% endif %}>
+                    <span><strong>{{ status|title }}</strong></span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <section class="rule-target-section">
+        <h2>Ziele</h2>
+        <label class="checkbox-row">
+            <input type="checkbox" name="all_channels" value="1"
+                   {% if values.get('all_channels', '1') in ['1', 1, true] %}checked{% endif %}>
+            <span>Alle Beacons – auch künftig neu angelegte</span>
+        </label>
+        {% if channels %}
+        <div class="field">
+            <span class="field-label-with-help">
+                <span>Bestimmte vorhandene Beacons</span>
+                <button class="field-help" type="button"
+                        aria-label="Hilfe zu bestimmten Beacons"
+                        data-tooltip="Wähle einzelne vorhandene Beacons aus, wenn die Rule nicht an alle Beacons senden soll.">?</button>
+            </span>
+            {% set selected_channels = values.get('channels', []) %}
+            {% if selected_channels is string %}{% set selected_channels = [selected_channels] %}{% endif %}
+            <div class="multi-checkbox-grid">
+                {% for channel in channels %}
+                <label class="multi-checkbox-option">
+                    <input type="checkbox" name="channels" value="{{ channel.id }}" {% if channel.id in selected_channels %}checked{% endif %}>
+                    <span><strong>{{ channel.name }}</strong><small>{{ channel.type }}</small></span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <label class="checkbox-row">
+            <input type="checkbox" name="all_guardians" value="1"
+                   {% if values.get('all_guardians', '') in ['1', 1, true] %}checked{% endif %}>
+            <span>Alle Guardians – auch künftig neu angelegte</span>
+        </label>
+        <small class="field-hint">
+            Ohne „Alle Guardians“ wird der im Launchpad erstellte Guardian automatisch verknüpft.
+        </small>
+    </section>
+
+    <section class="rule-target-section">
+        <h2>Zeitsteuerung</h2>
+        <div class="form-grid">
+            <label class="field">
+                <span class="field-label-with-help">
+                    <span>Verzögerung in Sekunden</span>
+                    <button class="field-help" type="button"
+                            aria-label="Hilfe zur Verzögerung"
+                            data-tooltip="LANaxy wartet diese Zeit, bevor die erste Meldung gesendet wird. Erholt sich der Guardian vorher, wird nichts versendet. 0 bedeutet sofort.">?</button>
+                </span>
+                <input type="number" min="0" name="delay_seconds"
+                       value="{{ values.get('delay_seconds', 0) }}">
+            </label>
+            <label class="field">
+                <span class="field-label-with-help">
+                    <span>Wiederholung alle X Minuten</span>
+                    <button class="field-help" type="button"
+                            aria-label="Hilfe zum Wiederholungsintervall"
+                            data-tooltip="Solange der Incident offen und nicht quittiert ist, wird die Meldung in diesem Abstand erneut versendet. 0 deaktiviert Wiederholungen.">?</button>
+                </span>
+                <input type="number" min="0" name="repeat_minutes"
+                       value="{{ values.get('repeat_minutes', 0) }}">
+            </label>
+            <label class="field">
+                <span class="field-label-with-help">
+                    <span>Anzahl Wiederholungen</span>
+                    <button class="field-help" type="button"
+                            aria-label="Hilfe zur Anzahl der Wiederholungen"
+                            data-tooltip="Maximale Anzahl zusätzlicher Meldungen nach der ersten Benachrichtigung.">?</button>
+                </span>
+                <input type="number" min="0" max="100" name="repeat_count"
+                       value="{{ values.get('repeat_count', 0) }}">
+            </label>
+        </div>
+        <label class="checkbox-row">
+            <input type="checkbox" name="quiet_hours_enabled" value="1"
+                   {% if values.get('quiet_hours_enabled') in ['1', 1, true] %}checked{% endif %}>
+            <span>Ruhezeit aktivieren</span>
+        </label>
+        <div class="form-grid">
+            <label class="field">
+                <span class="field-label-with-help">
+                    <span>Ruhezeit von</span>
+                    <button class="field-help" type="button"
+                            aria-label="Hilfe zum Beginn der Ruhezeit"
+                            data-tooltip="Ab dieser Uhrzeit werden Meldungen dieser Rule unterdrückt.">?</button>
+                </span>
+                <input type="time" name="quiet_start"
+                       value="{{ values.get('quiet_start', '22:00') }}">
+            </label>
+            <label class="field">
+                <span class="field-label-with-help">
+                    <span>Ruhezeit bis</span>
+                    <button class="field-help" type="button"
+                            aria-label="Hilfe zum Ende der Ruhezeit"
+                            data-tooltip="Ab dieser Uhrzeit darf die Rule wieder Meldungen versenden. Unterdrückte Meldungen werden nicht nachträglich gesendet.">?</button>
+                </span>
+                <input type="time" name="quiet_end"
+                       value="{{ values.get('quiet_end', '07:00') }}">
+            </label>
+        </div>
+    </section>
+
+    <label class="checkbox-row">
+        <input type="checkbox" name="root_cause_only" value="1"
+               {% if values.get('root_cause_only') in ['1', 1, true] %}checked{% endif %}>
+        <span>Nur Root Causes senden</span>
+    </label>
+    <input type="hidden" name="enabled" value="1">
+    <input type="hidden" name="all_groups" value="1">
+
+    <div class="form-actions">
+        <a class="button" href="{{ back_url }}">Zurück</a>
+        <button class="button primary" type="submit">Weiter zur Zusammenfassung</button>
+    </div>
+</form>
+{% endblock %}

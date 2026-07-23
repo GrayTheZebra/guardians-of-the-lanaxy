@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Rules · {{ app_name }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="{{ url_for('rules_page') }}">Rules</a></nav>
+
+<section class="dashboard-heading">
+    <div>
+        <h1>{{ t('rules.title') }}</h1>
+        <p>{{ t('rules.subtitle') }}</p>
+    </div>
+    <div class="heading-actions">
+        <a class="button primary" href="{{ url_for('notification_rule_form') }}">{{ t('rules.add') }}</a>
+    </div>
+</section>
+
+{% if safety_findings %}
+<section class="routing-safety-panel">
+    <div class="routing-safety-heading">
+        <span>!</span>
+        <div>
+            <h2>Benachrichtigungswege prüfen</h2>
+            <p>
+                LANaxy hat mögliche Schleifen oder Abhängigkeiten zwischen
+                Guardians und Beacons erkannt.
+            </p>
+        </div>
+    </div>
+    <div class="routing-safety-list">
+    {% for finding in safety_findings %}
+        <article class="routing-finding {{ finding.level }}">
+            <strong>{{ 'Blockierende Schleife' if finding.level == 'error' else 'Mögliche Abhängigkeit' }}</strong>
+            <p>{{ finding.message }}</p>
+            <small>
+                Rule: {{ finding.rule_name or finding.rule_id }} ·
+                Guardian: {{ finding.guardian_name }} ·
+                Beacon: {{ finding.beacon_name }}
+            </small>
+        </article>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+
+<div class="guardian-grid rules-grid">
+{% for rule in rules %}
+    {% set paused = paused_rules.get(rule.id) %}
+    {% set beacon_state = rule_beacon_status.get(rule.id|string, {'selected': 0, 'active': 0}) %}
+    {% set no_active_beacons = rule.get('enabled', true) and beacon_state.active == 0 %}
+    <article class="guardian-card rule-card {{ 'status-warning' if paused or no_active_beacons else ('status-active' if rule.get('enabled', true) else 'status-disabled') }}">
+        <div class="guardian-top">
+            <span class="device-icon rule-device-icon">R</span>
+            <div class="guardian-title">
+                <h2><a href="{{ url_for('notification_rule_form', rule_id=rule.id) }}">{{ rule.name }}</a></h2>
+                <p>{{ rule.get('statuses', [])|join(', ') }}</p>
+            </div>
+            <span class="status-badge">{{ 'pausiert' if paused else ('keine aktiven Beacons' if no_active_beacons else ('aktiv' if rule.get('enabled', true) else 'inaktiv')) }}</span>
+            <div class="card-menu">
+                <button class="kebab" type="button" aria-expanded="false">⋮</button>
+                <div class="card-menu-panel" hidden>
+                    <a href="{{ url_for('notification_rule_form', rule_id=rule.id) }}">{{ t('common.edit') }}</a>
+                    <form method="post" action="{{ url_for('notification_rule_duplicate', rule_id=rule.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">{{ t('common.duplicate') }}</button>
+                    </form>
+                    {% if paused %}
+                    <form method="post" action="{{ url_for('notification_rule_resume', rule_id=rule.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">Fortsetzen</button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="{{ url_for('notification_rule_pause', rule_id=rule.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="duration_minutes" value="60">
+                        <button type="submit">Für 60 Minuten pausieren</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('notification_rule_toggle', rule_id=rule.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">{{ 'Deaktivieren' if rule.get('enabled', true) else 'Aktivieren' }}</button>
+                    </form>
+                    <form method="post"
+                          action="{{ url_for('notification_rule_delete', rule_id=rule.id) }}"
+                          onsubmit="return confirm('Rule wirklich löschen?')">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button class="menu-danger" type="submit">{{ t('common.delete') }}</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <p class="guardian-message">
+            {{ 'Alle Guardians' if rule.get('all_guardians', true) else (rule.get('guardians', [])|length ~ ' ausgewählte Guardians') }}
+            ·
+            {{ 'Alle Beacons' if rule.get('all_channels') else (rule.get('channels', [])|length ~ ' ausgewählte Beacons') }}
+        </p>
+
+        <div class="guardian-stats">
+            <div><svg><use href="#icon-shield"/></svg><span>Guardians</span><strong>{{ 'Alle' if rule.get('all_guardians', true) else rule.get('guardians', [])|length }}</strong></div>
+            <div><svg><use href="#icon-settings"/></svg><span>Beacons</span><strong>{{ beacon_state.active }} aktiv{% if beacon_state.selected != beacon_state.active %} / {{ beacon_state.selected }} gewählt{% endif %}</strong></div>
+            <div><svg><use href="#icon-clock"/></svg><span>Verzögerung</span><strong>{{ rule.get('delay_seconds', 0) }} s</strong></div>
+        </div>
+
+        <div class="rule-flags">
+            {% if no_active_beacons %}<span class="rule-warning-flag">Keine Benachrichtigung möglich: Kein ausgewählter Beacon ist aktiv</span>{% endif %}
+            {% if rule.get('root_cause_only') %}<span>Nur Root Causes</span>{% endif %}
+            {% if rule.get('quiet_hours_enabled') %}<span>Ruhezeit {{ rule.get('quiet_start') }}–{{ rule.get('quiet_end') }}</span>{% endif %}
+            {% if rule.get('repeat_count', 0) %}<span>{{ rule.repeat_count }} Wiederholungen</span>{% endif %}
+            {% if paused %}<span>Pausiert bis <span data-lanaxy-datetime="{{ paused.get('until','') }}">{{ paused.get('until','manuell') }}</span></span>{% endif %}
+            {% if rule.get('escalation_steps') %}<span>{{ rule.get('escalation_steps')|length }} Eskalationsstufen</span>{% endif %}
+        </div>
+
+        <div class="guardian-actions">
+            <a class="button action-primary" href="{{ url_for('notification_rule_form', rule_id=rule.id) }}">{{ t('common.edit') }}</a>
+            <form method="post" action="{{ url_for('notification_rule_test', rule_id=rule.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="button" type="submit">Rule testen</button>
+            </form>
+        </div>
+    </article>
+{% else %}
+    <div class="empty"><h2>Noch keine Rules</h2><p>Erstelle eine Rule, um Guardians mit Beacons zu verbinden.</p></div>
+{% endfor %}
+</div>
+
+<script src="{{ url_for('static', filename='card-menu.js') }}"></script>
+{% endblock %}

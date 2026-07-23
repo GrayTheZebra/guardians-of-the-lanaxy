@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Custom Guardian importieren · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <h1>Custom Guardian importieren</h1>
+        <p>ZIP-Paket oder Legacy-Python-Datei laden, prüfen und installieren</p>
+    </div>
+</section>
+
+<div class="security-warning">
+    <strong>Warnung:</strong>
+    Custom Guardians sind ausführbarer Python-Code. Installiere nur Code aus
+    vertrauenswürdigen Quellen.
+</div>
+
+<form method="post" class="config-form" id="custom-guardian-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-grid">
+        <label class="field">
+            <span>Modulname *</span>
+            <input
+                id="module-name"
+                name="module_name"
+                pattern="[a-z][a-z0-9_]*"
+                placeholder="pc_ping"
+                required
+            >
+            <small class="field-hint">
+                Nur Kleinbuchstaben, Zahlen und Unterstriche, zum Beispiel
+                <code>pc_ping</code>.
+            </small>
+        </label>
+
+        <label class="field">
+            <span>Plugin-Paket oder Python-Datei laden</span>
+            <input
+                id="guardian-file"
+                type="file"
+                accept=".zip,application/zip,.py,text/x-python,text/plain"
+            >
+            <small class="field-hint">
+                ZIP-Pakete laden Quellcode, Manifest, README und Sprachdateien in die Editoren. Legacy-Python-Dateien werden weiterhin unterstützt.
+            </small>
+        </label>
+    </div>
+
+    <label class="field source-editor">
+        <span>Quellcode</span>
+        <textarea
+            id="guardian-source"
+            name="source"
+            spellcheck="false"
+            required
+        >{{ template_source }}</textarea>
+    </label>
+
+    <div class="editor-status" id="editor-status">
+        Vorlage geladen. Du kannst sie bearbeiten oder durch eine Datei ersetzen.
+    </div>
+
+
+    <input type="hidden" id="manifest-json" name="manifest_json" value="">
+    <label class="field source-editor package-readme">
+        <span>README.md</span>
+        <textarea id="readme-md" name="readme_md" spellcheck="false"></textarea>
+    </label>
+
+    <section class="translation-editors">
+        <h2>Translations</h2>
+        <p class="field-hint">
+            Optionale JSON-Sprachdateien für den Custom Guardian.
+        </p>
+        <div class="form-grid">
+            <label class="field source-editor">
+                <span>Deutsch · de.json</span>
+                <textarea id="translation-de" name="translation_de" spellcheck="false">{
+  "name": "Mein Guardian",
+  "description": "Deutsche Beschreibung",
+  "fields": {}
+}</textarea>
+            </label>
+            <label class="field source-editor">
+                <span>English · en.json</span>
+                <textarea id="translation-en" name="translation_en" spellcheck="false">{
+  "name": "My Guardian",
+  "description": "English description",
+  "fields": {}
+}</textarea>
+            </label>
+        </div>
+    </section>
+
+    <label class="toggle-row">
+        <input type="checkbox" name="overwrite" value="1">
+        Vorhandenen Custom Guardian mit demselben Modulnamen überschreiben
+    </label>
+
+    <div class="form-actions">
+        <button class="button primary" type="submit">
+            Quellcode prüfen und installieren
+        </button>
+        <a class="button" href="{{ url_for('guardian_types') }}">
+            Abbrechen
+        </a>
+    </div>
+</form>
+
+<script>
+const moduleNameInput = document.getElementById("module-name");
+const fileInput = document.getElementById("guardian-file");
+const sourceEditor = document.getElementById("guardian-source");
+const editorStatus = document.getElementById("editor-status");
+
+function normalizeModuleName(value) {
+    return value
+        .toLowerCase()
+        .replaceAll("ä", "ae")
+        .replaceAll("ö", "oe")
+        .replaceAll("ü", "ue")
+        .replaceAll("ß", "ss")
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+/, "");
+}
+
+moduleNameInput.addEventListener("input", () => {
+    moduleNameInput.value = normalizeModuleName(moduleNameInput.value);
+});
+
+fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    try {
+        if (file.name.toLowerCase().endsWith(".zip")) {
+            const formData = new FormData();
+            formData.append("_csrf_token", {{ csrf_token()|tojson }});
+            formData.append("package", file);
+
+            const response = await fetch(
+                {{ url_for("plugin_package_preview", plugin_type="guardian")|tojson }},
+                { method: "POST", body: formData }
+            );
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                throw new Error(data.error || "Paket konnte nicht gelesen werden.");
+            }
+
+            moduleNameInput.value = data.manifest.module;
+            sourceEditor.value = data.source;
+            document.getElementById("manifest-json").value =
+                JSON.stringify(data.manifest);
+            document.getElementById("readme-md").value = data.readme || "";
+            document.getElementById("translation-de").value =
+                JSON.stringify(data.translations.de || {}, null, 2);
+            document.getElementById("translation-en").value =
+                JSON.stringify(data.translations.en || {}, null, 2);
+            editorStatus.className = "editor-status success";
+            editorStatus.textContent =
+                `Paket „${file.name}“ wurde geladen und kann bearbeitet werden.`;
+        } else if (file.name.toLowerCase().endsWith(".py")) {
+            sourceEditor.value = await file.text();
+            moduleNameInput.value =
+                normalizeModuleName(file.name.replace(/\.py$/i, ""));
+            document.getElementById("manifest-json").value = "";
+            editorStatus.className = "editor-status success";
+            editorStatus.textContent =
+                `Legacy-Datei „${file.name}“ wurde geladen.`;
+        } else {
+            throw new Error("Bitte eine ZIP- oder Python-Datei auswählen.");
+        }
+    } catch (error) {
+        editorStatus.className = "editor-status error";
+        editorStatus.textContent = error.message;
+    }
+});
+
+sourceEditor.addEventListener("input", () => {
+    editorStatus.textContent =
+        "Quellcode wurde bearbeitet. Importiert wird der aktuelle Editorinhalt.";
+    editorStatus.className = "editor-status";
+});
+</script>
+{% endblock %}

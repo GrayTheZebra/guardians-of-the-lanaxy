@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_launchpad_progress.html" import launchpad_progress %}
+{% block title %}Launchpad · {{ app_name }}{% endblock %}
+{% block content %}
+{{ launchpad_progress(step_number) }}
+
+<section class="launchpad-heading">
+    <div>
+        <p class="eyebrow">Launchpad</p>
+        <h1>{{ title }}</h1>
+        <p>{{ subtitle }}</p>
+    </div>
+    <form method="post" action="{{ url_for('launchpad_cancel', mission_id=mission.id) }}"
+          onsubmit="return confirm('Launchpad-Mission wirklich abbrechen?')">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <button class="button" type="submit">Abbrechen</button>
+    </form>
+</section>
+
+<section class="launchpad-explanation">
+    <span class="launchpad-explanation-icon">?</span>
+    <div>
+        <h2>Was passiert in diesem Schritt?</h2>
+        <p>
+            Ein Guardian ist die eigentliche Überwachung. Er prüft regelmäßig
+            ein Gerät oder einen Dienst und meldet LANaxy, ob alles funktioniert.
+            Wähle hier den Typ, der zu deinem Ziel passt. Im nächsten Bildschirm
+            trägst du die Verbindungs- und Prüfparameter ein.
+        </p>
+    </div>
+</section>
+
+<div class="guardian-catalog-toolbar">
+    <label class="guardian-search">
+        <span class="sr-only">Guardians durchsuchen</span>
+        <input type="search" data-guardian-search placeholder="Guardians durchsuchen …" autocomplete="off">
+    </label>
+</div>
+
+<div class="guardian-category-list" data-guardian-catalog="launchpad">
+{% for group in guardian_groups %}
+<details class="guardian-category guardian-category-{{ group.key }}" data-category="{{ group.key }}" open>
+    <summary>
+        <span>{{ group.label }}</span>
+        <span class="guardian-category-count" data-category-count>{{ group["items"]|length }}</span>
+    </summary>
+    <div class="launchpad-type-grid guardian-category-grid">
+    {% for item in group["items"] %}
+        <a class="launchpad-type-card guardian-catalog-card guardian-type-card guardian-type-card-{{ group.key }}"
+           data-search="{{ (item.name ~ ' ' ~ item.description ~ ' ' ~ group.label)|lower }}"
+           href="{{ url_for(next_endpoint, mission_id=mission.id, guardian_type=item.module) }}">
+            <span class="guardian-icon large">
+                <svg><use href="#icon-{{ item.get('icon', 'shield') }}"/></svg>
+            </span>
+            <div>
+                <h2>{{ item.name }}</h2>
+                <p>{{ item.description }}</p>
+                <small>{{ group.label }} · Version {{ item.get('version', '—') }}</small>
+            </div>
+            <span class="launchpad-arrow">›</span>
+        </a>
+    {% endfor %}
+    </div>
+</details>
+{% endfor %}
+<div class="empty-state guardian-search-empty" hidden>
+    <h3>Keine passenden Guardians</h3>
+    <p>Ändere den Suchbegriff oder lösche die Suche.</p>
+</div>
+</div>
+<script src="{{ url_for('static', filename='guardian_catalog.js') }}"></script>
+{% endblock %}

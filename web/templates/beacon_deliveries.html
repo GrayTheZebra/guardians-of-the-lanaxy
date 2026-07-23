@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ channel.name }} – Versandhistorie · {{ app_name }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs">
+    <a href="{{ url_for('beacons_page') }}">Beacons</a>
+    <span>›</span>
+    <span>{{ channel.name }}</span>
+</nav>
+<section class="dashboard-heading">
+    <div>
+        <h1>Versandhistorie</h1>
+        <p>{{ channel.name }} · {{ channel.type }}</p>
+    </div>
+    <a class="button" href="{{ url_for('notification_channel_edit', channel_id=channel.id) }}">Beacon bearbeiten</a>
+</section>
+
+<article class="protocol-card">
+    <div class="protocol-meta">{{ deliveries.total }} Versandversuche</div>
+    <div class="table-scroll">
+        <table class="protocol-table">
+            <thead>
+                <tr>
+                    <th>Zeit</th>
+                    <th>Guardian</th>
+                    <th>Incident</th>
+                    <th>Ereignis</th>
+                    <th>Rule</th>
+                    <th>Ergebnis</th>
+                    <th>Fehler</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for delivery in deliveries.rows %}
+                <tr>
+                    <td class="nowrap" data-lanaxy-datetime="{{ delivery.timestamp }}">{{ delivery.timestamp }}</td>
+                    <td>{{ delivery.guardian_id or '—' }}</td>
+                    <td>
+                        {% if delivery.incident_id %}
+                        <a href="{{ url_for('incident_detail', incident_id=delivery.incident_id) }}">#{{ delivery.incident_id }}</a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ delivery.event_kind }}</td>
+                    <td>{{ delivery.rule_name or delivery.rule_id }}</td>
+                    <td>
+                        <span class="log-level level-{{ 0 if delivery.success else 2 }}">
+                            {{ 'OK' if delivery.success else 'Fehler' }}
+                        </span>
+                    </td>
+                    <td>{{ delivery.error or '—' }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="7" class="empty-cell">Noch keine Versände protokolliert.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if deliveries.pages > 1 %}
+    <nav class="pagination">
+        {% if deliveries.page > 1 %}
+        <a class="button" href="{{ url_for('beacon_deliveries', channel_id=channel.id, page=deliveries.page-1) }}">Zurück</a>
+        {% endif %}
+        <span>Seite {{ deliveries.page }} von {{ deliveries.pages }}</span>
+        {% if deliveries.page < deliveries.pages %}
+        <a class="button" href="{{ url_for('beacon_deliveries', channel_id=channel.id, page=deliveries.page+1) }}">Weiter</a>
+        {% endif %}
+    </nav>
+    {% endif %}
+</article>
+{% endblock %}

@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+ACTION="${1:-}"
+VALUE="${2:-}"
+
+case "$ACTION" in
+  set-timezone)
+    [ -n "$VALUE" ] || { echo "Zeitzone fehlt." >&2; exit 2; }
+    case "$VALUE" in
+      *[!A-Za-z0-9_+./-]*|*..*) echo "Ungültige Zeitzone." >&2; exit 2 ;;
+    esac
+    timedatectl list-timezones | grep -Fxq "$VALUE" || { echo "Unbekannte Zeitzone: $VALUE" >&2; exit 2; }
+    timedatectl set-timezone "$VALUE"
+    ;;
+  mdns-set-hostname)
+    [ -n "$VALUE" ] || { echo "mDNS-Name fehlt." >&2; exit 2; }
+    case "$VALUE" in
+      *[!A-Za-z0-9-]*|-*|*-) echo "Ungültiger mDNS-Name. Erlaubt sind Buchstaben, Ziffern und Bindestriche." >&2; exit 2 ;;
+    esac
+    [ "${#VALUE}" -le 63 ] || { echo "Der mDNS-Name darf höchstens 63 Zeichen lang sein." >&2; exit 2; }
+    CONF=/etc/avahi/avahi-daemon.conf
+    [ -f "$CONF" ] || { echo "Avahi-Konfiguration fehlt." >&2; exit 2; }
+    if grep -Eq '^[[:space:]]*host-name=' "$CONF"; then
+      sed -i -E "s|^[[:space:]]*host-name=.*$|host-name=$VALUE|" "$CONF"
+    elif grep -Eq '^\[server\]' "$CONF"; then
+      sed -i "/^\[server\]/a host-name=$VALUE" "$CONF"
+    else
+      printf '\n[server]\nhost-name=%s\n' "$VALUE" >> "$CONF"
+    fi
+    systemctl restart avahi-daemon.service
+    ;;
+  mdns-enable)
+    systemctl enable --now avahi-daemon.service
+    ;;
+  mdns-disable)
+    systemctl disable --now avahi-daemon.service
+    ;;
+  *)
+    echo "Unbekannte Aktion." >&2
+    exit 2
+    ;;
+esac

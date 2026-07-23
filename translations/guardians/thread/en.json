@@ -1,0 +1,24 @@
+{
+  "name": "Thread Guardian",
+  "description": "Monitors the Thread dongle and OTBR.",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "id": {
+      "label": "Guardian ID"
+    },
+    "device_id": {
+      "label": "Device ID"
+    },
+    "interval": {
+      "label": "Interval (seconds)"
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    },
+    "retries": {
+      "label": "Failures before critical"
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}KI-Assistent · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">LANaxy AI Planner</p><h1>Was soll LANaxy überwachen?</h1><p>Beschreibe dein Ziel. Änderungen werden erst nach Vorschau und Bestätigung angelegt.</p></div>
+  <a class="button" href="{{ url_for('ai_settings') }}">KI-Einstellungen</a>
+</div>
+<form method="post" class="card form-card ai-request-form" id="ai-request-form">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <label for="ai-request-text">Beschreibung</label>
+  <textarea id="ai-request-text" name="request_text" rows="9" placeholder="Zum Beispiel: Überwache meinen Proxmox-Host unter 192.168.0.24 …">{{ request_text }}</textarea>
+  <div class="ai-request-footer">
+    <span class="field-hint">Die KI darf nur bekannte LANaxy-Objekte planen. Vor dem Anlegen siehst du alle Änderungen.</span>
+    <button class="button primary" id="ai-plan-button" type="submit"><span class="ai-button-label">Plan erstellen</span></button>
+  </div>
+  <div class="ai-loading" id="ai-loading" hidden><span class="ai-spinner"></span><div><strong>LANaxy wartet auf die Antwort der KI …</strong><small>Je nach Umfang kann das einige Sekunden dauern.</small></div></div>
+</form>
+{% if plan %}
+<section class="card ai-plan">
+  <div class="card-heading"><div><h2>Vorschau</h2><p>{{ plan.summary }}</p></div><span class="badge {{ 'ok' if plan.valid else 'critical' }}">{{ 'Validiert' if plan.valid else 'Fehlerhaft' }}</span></div>
+  {% if plan.errors %}<div class="topology-alert critical"><strong>Der Plan kann nicht angewendet werden.</strong><span>{{ plan.errors|join(' · ') }}</span></div>{% endif %}
+  {% if plan.warnings %}<div class="topology-alert warning"><strong>Hinweise</strong><span>{{ plan.warnings|join(' · ') }}</span></div>{% endif %}
+  <h3>Guardians · {{ plan.guardians|length }}</h3>
+  <form method="post" action="{{ url_for('ai_apply') }}">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <div class="ai-plan-grid">
+      {% for g in plan.guardians %}
+      {% set guardian_index = loop.index0 %}
+      <article class="module-card guardian-type-card guardian-type-card-{{ g.category_key }} ai-guardian-card">
+        <div class="ai-guardian-heading"><div><strong>{{ g.name }}</strong><small>{{ g.type }} · {{ g.group or 'Keine Gruppe' }}</small></div></div>
+        {% if g.notes %}<p>{{ g.notes|join(' · ') }}</p>{% endif %}
+        {% if g.depends_on %}<p><b>Abhängig von:</b> {{ g.depends_on|join(', ') }}</p>{% endif %}
+        {% if g.editable_field_definitions %}
+        <div class="ai-missing-fields"><strong>Konfiguration</strong>
+          {% for field in g.editable_field_definitions %}
+          <label>{{ field.label }}{% if field.required %} <span class="required-marker">*</span>{% endif %}
+            {% if field.options %}
+            <select name="guardian_{{ guardian_index }}_{{ field.key }}"><option value="">Bitte auswählen</option>{% for option in field.options %}{% set option_value = option.value if option is mapping else option %}<option value="{{ option_value }}" {{ 'selected' if g.config.get(field.key)|string == option_value|string else '' }}>{{ option.label if option is mapping else option }}</option>{% endfor %}</select>
+            {% elif field.type == 'checkbox' %}
+            <select name="guardian_{{ guardian_index }}_{{ field.key }}"><option value="true" {{ 'selected' if g.config.get(field.key, true) else '' }}>Ja</option><option value="false" {{ 'selected' if not g.config.get(field.key, true) else '' }}>Nein</option></select>
+            {% else %}
+            <input name="guardian_{{ guardian_index }}_{{ field.key }}" type="{{ 'password' if field.secret else ('number' if field.type in ['number','integer'] else 'text') }}" autocomplete="off" placeholder="{{ 'Bereits gespeichert – leer lassen zum Beibehalten' if field.secret and g.config.get(field.key) else field.key }}" value="{{ '' if field.secret else g.config.get(field.key, '') }}">
+            {% endif %}
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <details><summary>Rohkonfiguration</summary><pre>{{ g.config|tojson(indent=2) }}</pre></details>
+      </article>
+      {% endfor %}
+    </div>
+    <h3>Beacons · {{ plan.beacons|length }} / Rules · {{ plan.rules|length }}</h3>
+    {% if existing_beacons %}
+    <div class="ai-existing-beacons">
+      <strong>Vorhandene Beacons</strong>
+      {% for beacon in existing_beacons %}
+      <span class="badge {{ 'ok' if beacon.enabled else 'unknown' }}">{{ beacon.name }} · {{ beacon.type }} · {{ beacon.id }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if plan.rules %}
+    <div class="ai-rule-list">
+      {% for rule in plan.rules %}
+      <article class="ai-rule-card">
+        <strong>{{ rule.name }}</strong>
+        <span>Auslösen bei: {{ rule.statuses|join(', ')|title }}</span>
+        <span>Guardians: {{ rule.guardian_names|join(', ') if rule.guardian_names else 'alle' }}</span>
+        <span>Beacon: {% if rule.beacon_names %}<b>{{ rule.beacon_names|join(', ') }}</b>{% else %}<b class="warning-text">keiner zugeordnet</b>{% endif %}</span>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if plan.get('_debug') %}
+    <details class="ai-debug-box">
+      <summary>KI-Antwort und Beacon-Auflösung anzeigen</summary>
+      <div class="ai-debug-content">
+        <h4>Rohe KI-Antwort</h4>
+        <pre>{{ plan['_debug']['raw_response'] }}</pre>
+        <h4>Vorhandene Beacons</h4>
+        <pre>{{ plan['_debug']['existing_beacons']|tojson(indent=2) }}</pre>
+        <h4>Beacon-Auflösung</h4>
+        <pre>{{ plan['_debug']['resolved_rules']|tojson(indent=2) }}</pre>
+      </div>
+    </details>
+    {% endif %}
+    <div class="form-actions">
+      <button class="button primary" type="submit">Alles anlegen</button>
+    </div>
+  </form>
+  <form method="post" action="{{ url_for('ai_discard') }}" class="ai-discard-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button">Verwerfen</button></form>
+</section>
+{% endif %}
+<script>
+(() => {
+  const form = document.getElementById('ai-request-form');
+  if (!form) return;
+  form.addEventListener('submit', () => {
+    const button = document.getElementById('ai-plan-button');
+    const loading = document.getElementById('ai-loading');
+    button.disabled = true;
+    button.querySelector('.ai-button-label').textContent = 'KI arbeitet …';
+    loading.hidden = false;
+  });
+})();
+</script>
+{% endblock %}

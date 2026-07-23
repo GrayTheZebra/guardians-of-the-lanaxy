@@ -1,0 +1,47 @@
+mqtt:
+  enabled: false
+  host: ''
+  port: 1883
+  user: ''
+  password: ''
+  base_topic: lanaxy
+  homeassistant_discovery: false
+  discovery_prefix: homeassistant
+  retain: true
+  keepalive: 60
+
+web:
+  host: 0.0.0.0
+  port: 8090
+  authentication:
+    enabled: false
+    username: ''
+    password_hash: ''
+    session_lifetime_minutes: 480
+    session_version: 1
+  language: auto
+  dashboard: {}
+
+lanaxy:
+  loop_interval: 2
+  heartbeat_interval: 30
+  info_interval: 300
+  state_file: /var/lib/lanaxy/state.json
+  log_file: /var/log/lanaxy/lanaxy.log
+  database_file: /var/lib/lanaxy/lanaxy.db
+  log_all_checks: true
+  retention_days: 90
+  backup_keep_count: 20
+  config_history_keep: 100
+
+checks: []
+
+notifications:
+  channels: []
+  rules: []
+  default_rule_initialized: false
+
+control:
+  enabled: false
+  token_hash: ''
+  portals: []

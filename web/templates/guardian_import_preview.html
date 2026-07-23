@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Guardian-Import prüfen · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Sicherer Import</p><h1>Guardian-Import prüfen</h1><p>{{ import_count }} kompatible Guardians können übernommen werden.</p></div>
+  <a class="button" href="{{ url_for('guardian_management') }}">Abbrechen</a>
+</div>
+<section class="chart-card">
+  <aside class="guardian-mode-help guardian-mode-help--warning">
+    <span class="guardian-mode-help__icon"><svg><use href="#icon-warning"/></svg></span>
+    <div><strong>Zugangsdaten werden nicht übernommen</strong><p>Guardians mit fehlenden Secrets werden klar markiert, deaktiviert importiert und müssen anschließend bearbeitet werden.</p></div>
+  </aside>
+  <div class="table-scroll">
+    <table class="protocol-table">
+      <thead><tr><th>Status</th><th>Name</th><th>Typ</th><th>ID</th><th>Hinweis</th></tr></thead>
+      <tbody>
+      {% for item in preview %}
+        <tr>
+          <td><span class="log-level level-{{ 0 if item.status in ['new','rename'] else 1 }}">{{ {'new':'Neu','rename':'ID angepasst','secrets':'Zugangsdaten fehlen','skip':'Übersprungen'}.get(item.status,item.status) }}</span></td>
+          <td>{{ item.name }}</td><td>{{ item.guardian }}</td>
+          <td>{% if item.old_id and item.old_id != item.new_id %}<del>{{ item.old_id }}</del> → {% endif %}{{ item.new_id or '—' }}</td>
+          <td>{{ item.reason or 'Wird importiert.' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form method="post" action="{{ url_for('guardian_import_confirm') }}" class="form-actions">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button class="button primary" type="submit">Import bestätigen</button>
+    <a class="button" href="{{ url_for('guardian_management') }}">Abbrechen</a>
+  </form>
+</section>
+{% endblock %}

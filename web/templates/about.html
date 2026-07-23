@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Über · {{ app_name }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="{{ url_for('about_page') }}">Über</a></nav>
+<section class="dashboard-heading">
+    <div>
+        <p class="eyebrow">Über LANaxy</p>
+        <h1>Guardians of the LANaxy</h1>
+        <p>Lokale, modulare Überwachung für Homelab, Smart Home und kleine Infrastrukturen.</p>
+    </div>
+</section>
+<section class="system-grid about-grid">
+    <article class="chart-card">
+        <h2>Projekt</h2>
+        <p><strong>Guardians überwachen. Rules entscheiden. Beacons benachrichtigen. Portals steuern.</strong></p>
+        <dl class="system-facts">
+            <div><dt>Version</dt><dd>{{ app_version }}</dd></div>
+            <div><dt>Edition</dt><dd>Community</dd></div>
+            <div><dt>Autor</dt><dd>GrayTheZebra</dd></div>
+            <div><dt>Betrieb</dt><dd>Vollständig lokal</dd></div>
+            <div><dt>Lizenz</dt><dd>Open Source</dd></div>
+        </dl>
+    </article>
+    <article class="chart-card">
+        <h2>Grundprinzip</h2>
+        <p>LANaxy trennt Überwachung, Entscheidungen, Benachrichtigungen und externe Steuerung konsequent voneinander.</p>
+        <dl class="system-facts">
+            <div><dt>Guardian</dt><dd>Überwacht einen Dienst oder Zustand</dd></div>
+            <div><dt>Rule</dt><dd>Bewertet Ereignisse und legt Reaktionen fest</dd></div>
+            <div><dt>Beacon</dt><dd>Versendet Benachrichtigungen</dd></div>
+            <div><dt>Portal</dt><dd>Nimmt externe Kommandos entgegen</dd></div>
+        </dl>
+    </article>
+    <article class="chart-card">
+        <h2>Links</h2>
+        <p>Quellcode, Fehlerberichte und Weiterentwicklung werden über GitHub verwaltet.</p>
+        <div class="actions">
+            <a class="button primary" href="https://github.com/GrayTheZebra/guardians-of-the-lanaxy" target="_blank" rel="noopener">GitHub öffnen</a>
+            <a class="button" href="https://github.com/GrayTheZebra/guardians-of-the-lanaxy/issues" target="_blank" rel="noopener">Problem melden</a>
+        </div>
+    </article>
+</section>
+{% endblock %}

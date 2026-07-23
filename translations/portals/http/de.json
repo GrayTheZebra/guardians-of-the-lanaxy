@@ -1,0 +1,18 @@
+{
+  "name": "HTTP API",
+  "description": "Empfängt Control-Befehle per HTTP REST API.",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "allowed_commands": {
+      "label": "Erlaubte Befehle"
+    },
+    "ip_allowlist": {
+      "label": "IP-Allowlist"
+    },
+    "rate_limit_per_minute": {
+      "label": "Maximale Anfragen pro Minute"
+    }
+  }
+}

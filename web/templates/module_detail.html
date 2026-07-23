@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ module.get('name', module.module) }} · Module Manager{% endblock %}
+{% block content %}
+<nav class="breadcrumbs">
+    <a href="{{ url_for('modules_page') }}">Module Manager</a>
+    <span>›</span>
+    <span>{{ module.get('name', module.module) }}</span>
+</nav>
+
+<section class="module-detail-hero">
+    <div class="module-detail-icon">
+        <svg><use href="#icon-{{ module.get('icon', 'settings') }}"/></svg>
+    </div>
+    <div>
+        <div class="module-card-head">
+            <span class="module-type-badge {{ module.type }}">{{ module.type_label }}</span>
+            <span class="source-badge {{ module.source }}">
+                {{ 'Integriert' if module.source == 'builtin' else 'Custom' }}
+            </span>
+        </div>
+        <h1>{{ module.get('name', module.module) }}</h1>
+        <p>{{ module.get('description') or 'Keine Beschreibung vorhanden.' }}</p>
+    </div>
+    <div class="heading-actions">
+        {% if module.type == 'guardian' %}
+            <a class="button primary" href="{{ url_for('add_guardian', type=module.module) }}">Guardian hinzufügen</a>
+        {% elif module.type == 'beacon' %}
+            <a class="button primary" href="{{ url_for('notification_channel_add', channel_type=module.module) }}">Beacon hinzufügen</a>
+        {% else %}
+            <a class="button primary" href="{{ url_for('portal_add', portal_type=module.module) }}">Portal hinzufügen</a>
+        {% endif %}
+    </div>
+</section>
+
+<section class="module-detail-grid">
+    <article class="chart-card">
+        <h2>Modulinformationen</h2>
+        <dl class="system-facts">
+            <div><dt>Interne ID</dt><dd>{{ module.module }}</dd></div>
+            <div><dt>Version</dt><dd>{{ module.version }}</dd></div>
+            <div><dt>Autor</dt><dd>{{ module.author }}</dd></div>
+            <div><dt>Kategorie</dt><dd>{{ module.get('category', 'Allgemein') }}</dd></div>
+            <div><dt>Instanzen</dt><dd>{{ module.instance_count }}</dd></div>
+            <div><dt>Status</dt><dd>{{ module.status }}</dd></div>
+            {% if module.minimum_lanaxy_version %}
+            <div><dt>LANaxy mindestens</dt><dd>{{ module.minimum_lanaxy_version }}</dd></div>
+            {% endif %}
+        </dl>
+    </article>
+
+    <article class="chart-card">
+        <h2>Konfigurationsfelder</h2>
+        <div class="module-schema-list">
+        {% for key, field in module.get('schema', {}).items() %}
+            {% if field.type != 'hidden' %}
+            <div>
+                <strong>{{ field.label }}</strong>
+                <small>{{ field.get('help', field.type) }}</small>
+                {% if field.required %}<span>Pflichtfeld</span>{% endif %}
+            </div>
+            {% endif %}
+        {% else %}
+            <p>Dieses Modul besitzt keine konfigurierbaren Felder.</p>
+        {% endfor %}
+        </div>
+    </article>
+</section>
+
+{% if module.readme %}
+<article class="chart-card module-readme">
+    <h2>Dokumentation</h2>
+    <pre>{{ module.readme }}</pre>
+</article>
+{% endif %}
+
+{% if module.source == 'custom' %}
+<section class="module-danger-zone">
+    <div>
+        <h2>Custom Modul verwalten</h2>
+        <p>
+            Exportiere das Paket zur Sicherung oder entferne es. Ein Modul kann
+            nur gelöscht werden, wenn keine Instanz mehr darauf zugreift.
+        </p>
+    </div>
+    <div class="heading-actions">
+        {% if module.type == 'guardian' %}
+        <a class="button" href="{{ url_for('custom_guardian_export', name=module.file_module) }}">Paket exportieren</a>
+        {% elif module.type == 'beacon' %}
+        <a class="button" href="{{ url_for('custom_beacon_export', module_name=module.file_module) }}">Paket exportieren</a>
+        {% else %}
+        <a class="button" href="{{ url_for('custom_portal_export', module_name=module.file_module) }}">Paket exportieren</a>
+        {% endif %}
+        <form method="post"
+              action="{{ url_for('module_delete', module_type=module.type, module_name=module.module) }}"
+              onsubmit="return confirm('Custom Modul wirklich entfernen?')">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="button danger" {% if module.instance_count %}disabled{% endif %}>
+                Modul entfernen
+            </button>
+        </form>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

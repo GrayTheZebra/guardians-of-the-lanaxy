@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Protokoll · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+  <div><h1>Protokoll</h1><p>Prüfungen, Statuswechsel und Systemereignisse</p></div>
+  <div class="heading-actions">
+    <a class="button" href="{{ url_for('protocol_export', format_name='csv', **filters) }}">CSV</a>
+    <a class="button" href="{{ url_for('protocol_export', format_name='json', **filters) }}">JSON</a>
+  </div>
+</section>
+
+<form class="filter-panel" method="get">
+  <label><span>Suche</span><input type="search" name="search" value="{{ filters.search }}" placeholder="Guardian oder Meldung"></label>
+  <label><span>Guardian</span><select name="guardian_id"><option value="">Alle</option>
+    {% for g in filter_values.guardians %}<option value="{{ g.guardian_id }}" {% if filters.guardian_id == g.guardian_id %}selected{% endif %}>{{ g.guardian_name or g.guardian_id }}</option>{% endfor %}
+  </select></label>
+  <label><span>Status</span><select name="level">
+    <option value="">Alle</option><option value="0" {% if filters.level == '0' %}selected{% endif %}>OK</option>
+    <option value="1" {% if filters.level == '1' %}selected{% endif %}>Warning</option>
+    <option value="2" {% if filters.level == '2' %}selected{% endif %}>Critical</option>
+  </select></label>
+  <label><span>Typ</span><select name="event_type"><option value="">Alle</option>
+    {% for t in filter_values.event_types %}<option value="{{ t }}" {% if filters.event_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select></label>
+  <label><span>Von</span><input type="date" name="date_from" value="{{ filters.date_from }}"></label>
+  <label><span>Bis</span><input type="date" name="date_to" value="{{ filters.date_to }}"></label>
+  <div class="filter-actions"><button class="button primary">Filtern</button><a class="button" href="{{ url_for('protocol') }}">Reset</a></div>
+</form>
+
+<section class="protocol-card">
+  <div class="protocol-meta">{{ result.total }} Einträge</div>
+  <div class="table-scroll"><table class="protocol-table">
+    <thead><tr><th>Zeit</th><th>Level</th><th>Typ</th><th>Guardian</th><th>Meldung</th><th>Dauer</th></tr></thead>
+    <tbody>
+    {% for row in result.rows %}
+      <tr>
+        <td class="nowrap">{{ row.timestamp|replace('T',' ') }}</td>
+        <td><span class="log-level level-{{ row.level }}">{{ 'OK' if row.level == 0 else ('Warning' if row.level == 1 else 'Critical') }}</span></td>
+        <td><code>{{ row.event_type }}</code></td>
+        <td>{{ row.guardian_name or row.guardian_id or 'System' }}</td>
+        <td>{{ row.message }}</td><td class="nowrap">{{ row.response_time }} ms</td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="empty-cell">Keine Einträge gefunden.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <nav class="pagination">
+    {% if result.page > 1 %}<a class="button" href="{{ url_for('protocol', page=result.page-1, **filters) }}">← Neuer</a>{% endif %}
+    <span>Seite {{ result.page }} / {{ result.pages }}</span>
+    {% if result.page < result.pages %}<a class="button" href="{{ url_for('protocol', page=result.page+1, **filters) }}">Älter →</a>{% endif %}
+  </nav>
+</section>
+{% endblock %}

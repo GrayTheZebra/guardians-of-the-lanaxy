@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}MiniGuards · {{ app_name }}{% endblock %}
+{% block content %}
+<script>
+async function copyMiniGuardCommand(elementId) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  const text = element.innerText.trim();
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (!copied) throw new Error('copy failed');
+    }
+    window.showToast('Installationsbefehl kopiert.', 'success');
+  } catch (error) {
+    window.showToast('Kopieren nicht möglich. Bitte den Befehl manuell markieren.', 'error');
+  }
+}
+</script>
+<section class="dashboard-heading">
+  <div><p class="eyebrow">Verwaltete LANaxy-Agents</p><h1>MiniGuards</h1><p>Agents zentral überwachen, diagnostizieren, aktualisieren und sicher steuern.</p></div>
+</section>
+
+{% if install_command %}
+<section class="chart-card miniguard-command-card">
+  <h2>MiniGuard wurde angelegt</h2>
+  <p>Führe diesen einmalig gültigen Befehl innerhalb von {{ registration_ttl }} Minuten auf dem Zielsystem aus:</p>
+  <pre id="miniguard-install-command"><code>{{ install_command }}</code></pre>
+  <button class="button primary" type="button" onclick="copyMiniGuardCommand('miniguard-install-command')">Befehl kopieren</button>
+  <p class="form-help warning-text">Der Registrierungscode wird nur jetzt vollständig angezeigt. Bewahre ihn nicht dauerhaft auf.</p>
+</section>
+{% endif %}
+
+<section class="system-grid miniguard-create-grid">
+  <article class="chart-card">
+    <h2>MiniGuard anlegen</h2>
+    <form method="post" action="{{ url_for('miniguard_add') }}" class="security-form">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label><span>Name</span><input name="name" required placeholder="Proxmox Host"></label>
+      <label><span>Beschreibung</span><input name="description" placeholder="Lokale Hardware- und Dienstprüfungen"></label>
+      <label><span>Registrierung gültig (Minuten)</span><input type="number" min="5" max="1440" name="ttl_minutes" value="30"></label>
+      <button class="button primary" type="submit">MiniGuard anlegen</button>
+    </form>
+  </article>
+  <article class="chart-card miniguard-info-card">
+    <div class="miniguard-info-card__icon"><svg><use href="#icon-shield"/></svg></div>
+    <div>
+      <h2>Was sind MiniGuards?</h2>
+      <p>MiniGuards sind schlanke Agents für weitere Linux-Systeme im Netzwerk. Sie melden Hardware-, System- und Dienstinformationen an LANaxy und ermöglichen zentrale Diagnose- und Verwaltungsaktionen, wenn eine Prüfung nicht direkt vom LANaxy-Server ausgeführt werden kann.</p>
+      <ul>
+        <li>sichere Remote-Checks und Hardwareinventar ohne freie Shell-Ausführung</li>
+        <li>einmalige, zeitlich begrenzte Registrierung mit gehasht gespeichertem Agent-Token</li>
+        <li>Capability-Erkennung, Diagnose, SMART-Prüfungen und kontrollierte Agent-Updates</li>
+        <li>automatische Offline-Erkennung nach drei Minuten ohne Heartbeat</li>
+      </ul>
+    </div>
+  </article>
+</section>
+
+{% if inventory %}
+<section class="chart-card"><h2>Hardwareinventar</h2><p><strong>{{ inventory.status|upper }}</strong>: {{ inventory.message }}</p>{% set d=inventory.details or {} %}<div class="detail-grid"><div><dt>Datenträger</dt><dd>{{ d.get('disks',[])|length }}</dd></div><div><dt>USB</dt><dd>{{ d.get('usb',[])|length }}</dd></div><div><dt>PCI</dt><dd>{{ d.get('pci',[])|length }}</dd></div><div><dt>ZFS-Pools</dt><dd>{{ d.get('zfs_pools',[])|length }}</dd></div><div><dt>Backups</dt><dd>{{ d.get('backup_files',[])|length }}</dd></div></div><details><summary>Inventar anzeigen</summary><pre><code>{{ d|tojson(indent=2) }}</code></pre></details></section>
+{% endif %}
+
+{% if action_result %}
+<section class="chart-card miniguard-action-result">
+  <h2>Letzte MiniGuard-Aktion</h2>
+  <p><strong>{{ action_result.action }}</strong> · {{ action_result.status|upper }}: {{ action_result.message }}</p>
+  {% if action_result.details %}
+  {% if action_result.details.logs is defined %}
+  <pre class="miniguard-log-output"><code>{{ action_result.details.logs }}</code></pre>
+  {% else %}
+  <details><summary>Technische Details</summary><pre><code>{{ action_result.details|tojson(indent=2) }}</code></pre></details>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+{% if selftest %}
+<section class="chart-card">
+  <h2>MiniGuard-Selbsttest</h2>
+  <p><strong>{{ selftest.status|upper }}</strong>: {{ selftest.message }}</p>
+  {% if selftest.details %}<pre><code>{{ selftest.details|tojson(indent=2) }}</code></pre>{% endif %}
+</section>
+{% endif %}
+
+<section class="chart-card">
+  <div class="card-heading miniguard-bulk-heading">
+      <div><h2>Registrierte MiniGuards</h2><p>{{ agents|length }} Einträge</p></div>
+      {% if agents %}
+      <form id="miniguard-bulk-form" class="miniguard-bulk-actions" method="post" action="{{ url_for('miniguard_bulk') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <label><input type="checkbox" id="select-all-miniguards"> alle auswählen</label>
+        <select name="action" required>
+          <option value="">Massenaktion …</option>
+          <option value="run_diagnostics">Diagnose</option>
+          <option value="refresh_inventory">Inventar aktualisieren</option>
+          <option value="update_agent">Agent aktualisieren</option>
+          <option value="restart_agent">Agent neu starten</option>
+          <option value="enable">Aktivieren</option>
+          <option value="disable">Deaktivieren</option>
+        </select>
+        <button class="button" type="submit">Ausführen</button>
+      </form>
+      {% endif %}
+    </div>
+  {% if agents %}
+  <div class="miniguard-list">
+    {% for agent in agents %}
+    <article class="miniguard-row miniguard-card {{ 'is-online' if agent.online else ('is-offline' if agent.registered else 'is-pending') }}">
+      <div class="miniguard-card__topline">
+        <label class="miniguard-select"><input form="miniguard-bulk-form" type="checkbox" name="agent_ids" value="{{ agent.id }}"> auswählen</label>
+        <span class="miniguard-status-badge {{ 'ok' if agent.online else ('warning' if agent.registered else 'unknown') }}">
+          {{ 'Online' if agent.online else ('Offline' if agent.registered else 'Nicht registriert') }}
+        </span>
+      </div>
+      <div class="miniguard-header">
+        <span class="miniguard-card__icon"><svg><use href="#icon-shield"/></svg></span>
+        <div class="miniguard-main"><strong>{{ agent.name }}</strong><small>{{ agent.description or 'Keine Beschreibung' }}</small></div>
+      </div>
+      <div class="miniguard-meta miniguard-card__stats">
+        <div><small>Hostname</small><strong>{{ agent.hostname or '—' }}</strong></div>
+        <div>
+          <small>Version</small>
+          <strong>{{ agent.agent_version or '—' }}</strong>
+        </div>
+        <div><small>Remote-Worker</small><strong>{{ 'Aktiv' if agent.worker_ready else 'Nicht aktiv' }}</strong></div>
+        <div><small>Fähigkeiten</small><strong>{{ agent.capabilities|length if agent.capabilities else 0 }}</strong></div>
+      </div>
+      {% if agent.capabilities %}<div class="miniguard-capabilities" title="{{ agent.capabilities|join(', ') }}">{{ agent.capabilities|join(' · ') }}</div>{% endif %}
+      {% if agent.registered %}
+      <div class="miniguard-compatibility miniguard-compatibility--{{ agent.compatibility.status }}">
+        <svg><use href="#icon-{{ 'check' if agent.compatibility.compatible else 'warning' }}"/></svg>
+        <div>
+          <strong>
+            {% if agent.compatibility.compatible %}Agent passt zu LANaxy {{ app_version }}
+            {% else %}MiniGuard aktualisieren{% endif %}
+          </strong>
+          <p>{{ agent.compatibility.reason }}</p>
+        </div>
+        {% if agent.compatibility.update_required %}
+        <a class="button warning" href="#miniguard-update-details-{{ agent.id }}">Update-Befehl</a>
+        {% endif %}
+      </div>
+      {% if not agent.remote_management_ready %}
+      <div class="configuration-warning"><strong>Einmaliges Bootstrap-Update erforderlich.</strong> Dieser Agent kennt die direkte LANaxy-Verwaltung noch nicht. Aktualisiere ihn zunächst mit dem cURL-Befehl unter „Agent aktualisieren“. Ab Version 1.7.0 funktionieren Updates und Aktionen direkt.</div>
+      {% endif %}
+      <div class="miniguard-management-grid {{ '' if agent.remote_management_ready else 'miniguard-management-grid--locked' }}">
+        <details class="miniguard-actions {{ 'locked' if not agent.remote_management_ready else '' }}">
+          <summary>Steuern und verwalten</summary>
+          <fieldset class="miniguard-details-body miniguard-action-buttons" {% if not agent.remote_management_ready %}disabled{% endif %}>
+            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="run_diagnostics"><button class="button" type="submit">Diagnose ausführen</button></form>
+            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="refresh_inventory"><button class="button" type="submit">Inventar aktualisieren</button></form>
+            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="fetch_logs"><input type="hidden" name="lines" value="250"><button class="button" type="submit">Agent-Protokoll abrufen</button></form>
+            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_agent"><button class="button primary" type="submit">Agent direkt aktualisieren</button></form>
+            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}" data-confirm="MiniGuard wirklich neu starten?"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="restart_agent"><button class="button" type="submit">Agent neu starten</button></form>
+            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}" data-confirm="Agent-Token wirklich rotieren? Alte Zugangsdaten werden sofort ungültig."><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="rotate_token"><button class="button" type="submit">Token rotieren</button></form>
+            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}" data-confirm="Letzte MiniGuard-Sicherung wiederherstellen?"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="rollback_agent"><button class="button warning" type="submit">Agent-Rollback</button></form>
+            <form class="miniguard-host-restart miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}" data-confirm="Host wirklich neu starten?"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="restart_host"><label><span>Host-Neustart bestätigen</span><input name="confirm_host_restart" placeholder="RESTART"></label><button class="button danger" type="submit">Host neu starten</button></form>
+          </fieldset>
+          <div class="miniguard-inline-result" hidden aria-live="polite"></div>
+        </details>
+        <details class="miniguard-permissions">
+          <summary>Aktionsberechtigungen</summary>
+          <form class="miniguard-details-body permission-grid" method="post" action="{{ url_for('miniguard_permissions', agent_id=agent.id) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            {% for action_name in action_names %}
+            <label><input type="checkbox" name="permission_{{ action_name }}" value="1" {% if agent.action_permissions.get(action_name) %}checked{% endif %}> {{ action_name }}</label>
+            {% endfor %}
+            <p class="form-help warning-text">„restart_host“ ist standardmäßig gesperrt. Es erlaubt ausschließlich einen bestätigten Neustart, keine freie Shell-Ausführung.</p>
+            <button class="button primary" type="submit">Berechtigungen speichern und übertragen</button>
+          </form>
+        </details>
+        <details class="miniguard-audit">
+          <summary>Aufträge und Audit</summary>
+          <div class="miniguard-details-body">
+            {% if agent.recent_tasks %}
+            <div class="miniguard-task-list">
+              {% for task in agent.recent_tasks %}
+              <div><strong>{{ task.action_type or task.check_type }}</strong><span>{{ task.status }}</span><small>{{ task.created_at }}</small><p>{{ task.result.message if task.result else 'Noch kein Ergebnis' }}</p></div>
+              {% endfor %}
+            </div>
+            {% else %}<p>Noch keine Aufträge vorhanden.</p>{% endif %}
+          </div>
+        </details>
+      </div>
+      {% if agent.hardware_inventory_normalized %}
+      <details class="miniguard-inventory-details" {% if agent.pending_inventory_changes %}open{% endif %}>
+        <summary>Hardwareinventar{% if agent.pending_inventory_changes %} <span class="badge warning">{{ agent.pending_inventory_changes|length }} Änderungen</span>{% endif %}</summary>
+        <div class="miniguard-details-body">
+          {% if agent.pending_inventory_changes %}
+          <form method="post" action="{{ url_for('miniguard_inventory_acknowledge',agent_id=agent.id) }}" class="inventory-change-list">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            {% for change in agent.pending_inventory_changes %}
+            {% set cid=change.batch_id ~ ':' ~ change.inventory_id ~ ':' ~ change.change %}
+            <label class="inventory-change inventory-change--{{ change.change }}"><input type="checkbox" name="change_ids" value="{{ cid }}" checked><span><strong>{{ 'Neu' if change.change=='added' else ('Entfernt' if change.change=='removed' else 'Geändert') }}: {{ change.name }}</strong><small>{{ change.kind }} · {{ change.detected_at }}</small></span></label>
+            {% endfor %}<button class="button primary">Ausgewählte Änderungen bestätigen</button>
+          </form>{% endif %}
+          {% for kind, rows in agent.hardware_inventory_normalized.items() if rows %}
+          <h4>{{ kind }}</h4><div class="inventory-alias-grid">
+          {% for item in rows %}<form method="post" action="{{ url_for('miniguard_inventory_alias',agent_id=agent.id) }}" class="inventory-alias-row"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="inventory_id" value="{{ item.inventory_id }}"><div><strong>{{ item.effective_name }}</strong><small>{{ item.inventory_id }}{% if item.serial_path %} · {{ item.serial_path }}{% endif %}</small></div><input name="alias" value="{{ agent.inventory_aliases.get(item.inventory_id,'') }}" placeholder="Eigener Gerätename"><button class="button">Speichern</button></form>{% endfor %}
+          </div>{% endfor %}
+        </div>
+      </details>
+      {% endif %}
+      <div class="miniguard-tools">
+        <details class="miniguard-diagnostics">
+          <summary>Diagnose</summary>
+          <div class="miniguard-details-body">
+            <dl class="detail-grid">
+              <div><dt>Letzter Poll</dt><dd>{{ agent.last_poll or '—' }}</dd></div>
+              <div><dt>Letzter Check</dt><dd>{{ agent.last_check_type or '—' }}</dd></div>
+              <div><dt>Check-Status</dt><dd>{{ agent.last_check_status or '—' }}</dd></div>
+              <div><dt>Antwortzeit</dt><dd>{{ agent.last_check_duration_ms ~ ' ms' if agent.last_check_duration_ms is defined else '—' }}</dd></div>
+            </dl>
+            <p>{{ agent.last_check_message or 'Noch kein Remote-Check ausgeführt.' }}</p>
+            <p><strong>Werkzeuge:</strong> {% if agent.tools %}{% for tool, available in agent.tools.items() %}<span class="badge {{ 'ok' if available else 'unknown' }}">{{ tool }}: {{ 'vorhanden' if available else 'fehlt' }}</span> {% endfor %}{% else %}Noch keine Werkzeugdiagnose gemeldet.{% endif %}</p>
+            {% if agent.missing_tools %}<p class="warning-text"><strong>Fehlende optionale Werkzeuge:</strong> {{ agent.missing_tools|join(', ') }}</p>{% endif %}
+            <a class="button" href="{{ url_for('miniguard_diagnostics_download', agent_id=agent.id) }}">Diagnosebericht herunterladen</a>
+            <form method="post" action="{{ url_for('miniguard_selftest', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Verbindung und Fähigkeiten testen</button></form>
+            <form method="post" action="{{ url_for('miniguard_inventory', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button primary" type="submit">Hardwareinventar aktualisieren</button></form>
+          </div>
+        </details>
+        <details class="miniguard-update" id="miniguard-update-details-{{ agent.id }}">
+          <summary>Agent aktualisieren</summary>
+          <div class="miniguard-details-body">
+            <pre id="miniguard-update-{{ agent.id }}"><code>{{ agent.update_command }}</code></pre>
+            <button class="button" type="button" onclick="copyMiniGuardCommand('miniguard-update-{{ agent.id }}')">Befehl kopieren</button>
+          </div>
+        </details>
+      </div>
+      {% endif %}
+      <div class="miniguard-footer-actions">
+        <form method="post" action="{{ url_for('miniguard_toggle', agent_id=agent.id) }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="enabled" value="{{ '0' if agent.enabled else '1' }}">
+          <button class="button" type="submit">{{ 'Deaktivieren' if agent.enabled else 'Aktivieren' }}</button>
+        </form>
+        <form class="miniguard-delete" method="post" action="{{ url_for('miniguard_delete', agent_id=agent.id) }}" onsubmit="return confirm('Der Agent wird nur aus LANaxy entfernt.
+
+Vorher auf dem Zielsystem ausführen:
+
+miniguard uninstall  # als root, sonst: sudo miniguard uninstall
+
+MiniGuard wirklich löschen?')">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button class="button danger" type="submit">Löschen</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty-state"><h3>Noch keine MiniGuards</h3><p>Lege links den ersten Agenten an.</p></div>{% endif %}
+</section>
+
+<section class="chart-card">
+  <h2>Deinstallation</h2>
+  <p>Das Löschen in LANaxy entfernt den Agenten nicht automatisch vom Zielsystem. Dort vorher oder anschließend ausführen:</p>
+  <pre><code>miniguard uninstall  # als root, sonst: sudo miniguard uninstall</code></pre>
+</section>
+<script>
+document.getElementById("select-all-miniguards")?.addEventListener("change", (event) => {
+  document.querySelectorAll('input[name="agent_ids"]').forEach((input) => input.checked = event.target.checked);
+});
+
+function renderMiniGuardActionResult(form, payload) {
+  const details = form.closest("details");
+  const result = details?.querySelector(".miniguard-inline-result");
+  if (!result) return;
+  result.hidden = false;
+  result.className = `miniguard-inline-result ${payload.ok ? "is-success" : "is-error"}`;
+  result.replaceChildren();
+
+  const heading = document.createElement("strong");
+  heading.textContent = payload.ok ? "Aktion abgeschlossen" : "Aktion fehlgeschlagen";
+  const message = document.createElement("p");
+  message.textContent = payload.message || "Keine Rückmeldung erhalten.";
+  result.append(heading, message);
+
+  const detailPayload = payload.details || {};
+  if (detailPayload.logs) {
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    code.textContent = detailPayload.logs;
+    pre.appendChild(code);
+    result.appendChild(pre);
+  }
+}
+
+document.querySelectorAll(".miniguard-ajax-action").forEach((form) => {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const confirmation = form.dataset.confirm;
+    if (confirmation && !window.confirm(confirmation)) return;
+
+    const button = form.querySelector('button[type="submit"], button:not([type])');
+    const originalText = button?.textContent || "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Wird ausgeführt …";
+    }
+
+    try {
+      const endpoint = form.getAttribute("action");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: new FormData(form),
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "Accept": "application/json",
+        },
+      });
+      const payload = await response.json().catch(() => ({
+        ok: false,
+        message: `Ungültige Serverantwort (HTTP ${response.status}).`,
+        details: {},
+      }));
+      renderMiniGuardActionResult(form, payload);
+      window.showToast(payload.message || "MiniGuard-Aktion abgeschlossen.", payload.ok ? "success" : "error");
+    } catch (error) {
+      const payload = {ok: false, message: `MiniGuard-Aktion fehlgeschlagen: ${error.message}`, details: {}};
+      renderMiniGuardActionResult(form, payload);
+      window.showToast(payload.message, "error");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+  });
+});
+</script>
+{% endblock %}

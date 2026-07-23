@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+    <div>
+        <h1>Einstellungen</h1>
+        <p>System-MQTT, Beacons und Regeln</p>
+    </div>
+</section>
+
+<section class="settings-section">
+    <div class="section-heading">
+        <div>
+            <h2>System-MQTT</h2>
+            <p>Veröffentlicht Guardian-Status, Heartbeat und Systeminformationen.</p>
+        </div>
+    </div>
+    <article class="notification-card system-mqtt-card">
+        <span class="channel-icon">MQ</span>
+        <div class="channel-main">
+            <h3>LANaxy System-MQTT</h3>
+            <p>{{ system_mqtt.get('host', 'nicht konfiguriert') }}:{{ system_mqtt.get('port', 1883) }} · {{ system_mqtt.get('base_topic', 'lanaxy') }}</p>
+        </div>
+        <a class="button" href="{{ url_for('system_mqtt_settings') }}">Konfigurieren</a>
+    </article>
+</section>
+
+<section class="settings-section">
+    <div class="section-heading settings-heading-stacked">
+        <div>
+            <h2>Beacons</h2>
+            <p>Beacons senden erkannte Ereignisse an externe Ziele.</p>
+        </div>
+        <div class="add-channel-menu">
+            {% for beacon in beacon_types if beacon.status == 'loaded' %}
+                <a class="button" href="{{ url_for('notification_channel_add', channel_type=beacon.module) }}">
+                    + {{ beacon.name }}
+                </a>
+            {% endfor %}
+            <a class="button beacon-manager-button" href="{{ url_for('beacon_management') }}">
+                Beacon-Typen verwalten
+            </a>
+        </div>
+    </div>
+
+    <div class="notification-grid">
+    {% for channel in channels %}
+        {% set channel_status = status.get(channel.id, {}) %}
+        <article class="notification-card {{ 'disabled-card' if not channel.get('enabled', true) }}">
+            <span class="channel-icon">
+                {{ {'mqtt':'MQ','webhook':'WH','get_webhook':'GET','email':'EM','discord':'DC','telegram':'TG'}.get(channel.type,'?') }}
+            </span>
+            <div class="channel-main">
+                <div class="channel-title">
+                    <h3>{{ channel.name }}</h3>
+                    <span class="status-badge">{{ 'aktiv' if channel.get('enabled', true) else 'inaktiv' }}</span>
+                </div>
+                {% if channel.type == 'mqtt' %}
+                    <p>{{ channel.host }}:{{ channel.get('port', 1883) }} · {{ channel.get('topic', 'lanaxy/notifications') }}</p>
+                {% elif channel.type == 'webhook' %}
+                    <p>{{ channel.get('method', 'POST') }} · {{ channel.url }}</p>
+                {% elif channel.type == 'email' %}
+                    <p>{{ channel.smtp_host }}:{{ channel.get('smtp_port', 587) }} · {{ channel.recipients }}</p>
+                {% elif channel.type == 'discord' %}
+                    <p>Discord-Webhook · {{ channel.get('username', 'LANaxy') }}</p>
+                {% elif channel.type == 'telegram' %}
+                    <p>Telegram · Chat {{ channel.chat_id }}</p>
+                {% endif %}
+                <div class="channel-health">
+                    <span>Letzter Versand: {{ channel_status.get('last_success', '—')|replace('T',' ') }}</span>
+                    {% if channel_status.get('last_error') %}
+                        <span class="channel-error">{{ channel_status.last_error }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="channel-actions">
+                <form method="post" action="{{ url_for('notification_channel_test', channel_id=channel.id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button class="button" type="submit">Testen</button>
+                </form>
+                <div class="card-menu">
+                    <button class="kebab settings-kebab" type="button" aria-expanded="false">⋮</button>
+                    <div class="card-menu-panel" hidden>
+                        <a href="{{ url_for('notification_channel_edit', channel_id=channel.id) }}">Bearbeiten</a>
+                        <form method="post" action="{{ url_for('notification_channel_duplicate', channel_id=channel.id) }}">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit">Duplizieren</button>
+                        </form>
+                        <form method="post" action="{{ url_for('notification_channel_toggle', channel_id=channel.id) }}">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit">{{ 'Deaktivieren' if channel.get('enabled', true) else 'Aktivieren' }}</button>
+                        </form>
+                        <form method="post" action="{{ url_for('notification_channel_delete', channel_id=channel.id) }}" onsubmit="return confirm('Beacon wirklich löschen?')">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <button class="menu-danger" type="submit">Löschen</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </article>
+    {% else %}
+        <div class="empty">Noch keine Beacons angelegt.</div>
+    {% endfor %}
+    </div>
+</section>
+
+<section class="settings-section">
+    <div class="section-heading settings-heading-stacked">
+        <div>
+            <h2>Benachrichtigungsregeln</h2>
+            <p>Bestimmt, wann welche Kanäle verwendet werden.</p>
+        </div>
+        <a class="button primary" href="{{ url_for('notification_rule_form') }}">+ Regel hinzufügen</a>
+    </div>
+
+    {% if missing_rule_warning %}
+    <div class="configuration-warning">
+        <strong>Keine Benachrichtigungsregel vorhanden.</strong>
+        Es gibt mindestens einen Kanal, aber keine Regel, die Ereignisse an ihn sendet.
+    </div>
+    {% endif %}
+
+    <div class="notification-grid">
+    {% for rule in rules %}
+        <article class="notification-card {{ 'disabled-card' if not rule.get('enabled', true) }}">
+            <span class="channel-icon rule-icon">R</span>
+            <div class="channel-main">
+                <div class="channel-title">
+                    <h3>{{ rule.name }}</h3>
+                    <span class="status-badge">{{ 'aktiv' if rule.get('enabled', true) else 'inaktiv' }}</span>
+                </div>
+                <p>
+                    {{ rule.get('statuses', [])|join(', ') }} ·
+                    {{ 'alle Beacons' if rule.get('all_channels') else (rule.get('channels', [])|length ~ ' Beacon(s)') }}
+                </p>
+                <small>
+                    {{ 'Alle Guardians' if rule.get('all_guardians', true) else (rule.get('guardians', [])|length ~ ' Guardian(s)') }}
+                    ·
+                    {{ 'Alle Gruppen' if rule.get('all_groups', true) else (rule.get('groups', [])|length ~ ' Gruppe(n)') }}
+                    {% if rule.get('root_cause_only') %} · Nur Root Causes{% endif %}
+                </small>
+            </div>
+            <div class="channel-actions">
+                <a class="button" href="{{ url_for('notification_rule_form', rule_id=rule.id) }}">Bearbeiten</a>
+                <form method="post" action="{{ url_for('notification_rule_delete', rule_id=rule.id) }}" onsubmit="return confirm('Regel wirklich löschen?')">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button class="button danger" type="submit">Löschen</button>
+                </form>
+            </div>
+        </article>
+    {% else %}
+        <div class="empty">Noch keine Regeln angelegt.</div>
+    {% endfor %}
+    </div>
+</section>
+
+<script>
+document.querySelectorAll(".settings-kebab").forEach(button => {
+    const panel = button.nextElementSibling;
+    button.addEventListener("click", event => {
+        event.stopPropagation();
+        document.querySelectorAll(".card-menu-panel").forEach(other => {
+            if (other !== panel) other.hidden = true;
+        });
+        panel.hidden = !panel.hidden;
+        button.setAttribute("aria-expanded", String(!panel.hidden));
+    });
+});
+document.addEventListener("click", () => {
+    document.querySelectorAll(".card-menu-panel").forEach(panel => panel.hidden = true);
+});
+</script>
+{% endblock %}

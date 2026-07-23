@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="breadcrumbs">
+    <a href="{{ url_for('rules_page') }}">Rules</a>
+    <span>›</span>
+    <span>{{ rule.get('name', 'Neue Rule') }}</span>
+</nav>
+<section class="dashboard-heading">
+    <div>
+        <h1>Rule</h1>
+        <p>Status, Ziele und Filter festlegen</p>
+    </div>
+</section>
+
+<form method="post" class="config-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-grid">
+        <label class="field">
+            <span>Name *</span>
+            <input name="name" value="{{ rule.get('name','') }}" required>
+        </label>
+
+        <div class="field">
+            <span>Status *</span>
+            <div class="multi-checkbox-grid multi-checkbox-grid--compact" id="statuses-select">
+                {% for status in ['warning','critical','recovery'] %}
+                <label class="multi-checkbox-option">
+                    <input type="checkbox" name="statuses" value="{{ status }}" {% if status in rule.get('statuses',['warning','critical','recovery']) %}checked{% endif %}>
+                    <span><strong>{{ status|title }}</strong></span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <section class="rule-target-section">
+        <h2>Beacons</h2>
+        <label class="checkbox-row">
+            <input id="all-channels" type="checkbox" name="all_channels" value="1"
+                   {% if rule.get('all_channels', true) %}checked{% endif %}>
+            <span>Alle Beacons – auch künftig neu angelegte</span>
+        </label>
+
+        <div class="field">
+            <span>Bestimmte Beacons</span>
+            <div class="rule-choice-grid" id="channels-select">
+                {% for channel in channels %}
+                <label class="rule-choice">
+                    <input type="checkbox" name="channels" value="{{ channel.id }}"
+                           {% if channel.id in rule.get('channels', []) %}checked{% endif %}>
+                    <span><strong>{{ channel.name }}</strong><small>{{ channel.type }}</small></span>
+                </label>
+                {% else %}
+                <p class="empty-choice">Noch keine Beacons angelegt.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="rule-target-section">
+        <h2>Guardians</h2>
+        <label class="checkbox-row">
+            <input id="all-guardians" type="checkbox" name="all_guardians" value="1"
+                   {% if rule.get('all_guardians', true) %}checked{% endif %}>
+            <span>Alle Guardians – auch künftig neu angelegte</span>
+        </label>
+
+        <div class="field">
+            <span>Bestimmte Guardians</span>
+            <div class="rule-choice-grid" id="guardians-select">
+                {% for check in checks %}
+                <label class="rule-choice">
+                    <input type="checkbox" name="guardians" value="{{ check.id }}"
+                           {% if check.id in rule.get('guardians', []) %}checked{% endif %}>
+                    <span><strong>{{ check.name }}</strong><small>{{ check.guardian }} · {{ check.id }}</small></span>
+                </label>
+                {% else %}
+                <p class="empty-choice">Noch keine Guardians angelegt.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="rule-target-section">
+        <h2>Gruppen</h2>
+        <label class="checkbox-row">
+            <input id="all-groups" type="checkbox" name="all_groups" value="1"
+                   {% if rule.get('all_groups', true) %}checked{% endif %}>
+            <span>Alle Gruppen – auch künftig neu angelegte</span>
+        </label>
+
+        <div class="field">
+            <span>Bestimmte Gruppen</span>
+            <div class="multi-checkbox-grid" id="groups-select">
+                {% for group in groups %}
+                <label class="multi-checkbox-option">
+                    <input type="checkbox" name="groups" value="{{ group }}" {% if group in rule.get('groups',[]) %}checked{% endif %}>
+                    <span><strong>{{ group }}</strong></span>
+                </label>
+                {% else %}<p class="empty-choice">Noch keine Gruppen vorhanden.</p>{% endfor %}
+            </div>
+        </div>
+    </section>
+
+
+    <section class="rule-target-section">
+        <h2>Zeitsteuerung</h2>
+
+        <div class="form-grid">
+            <label class="field">
+                <span>Verzögerung in Sekunden</span>
+                <input
+                    type="number"
+                    min="0"
+                    name="delay_seconds"
+                    value="{{ rule.get('delay_seconds', 0) }}"
+                >
+                <small class="field-hint">
+                    0 sendet die erste Meldung sofort.
+                </small>
+            </label>
+
+            <label class="field">
+                <span>Wiederholung alle X Minuten</span>
+                <input
+                    type="number"
+                    min="0"
+                    name="repeat_minutes"
+                    value="{{ rule.get('repeat_minutes', 0) }}"
+                >
+                <small class="field-hint">
+                    Nur für Warning und Critical. 0 deaktiviert Wiederholungen.
+                </small>
+            </label>
+
+            <label class="field">
+                <span>Anzahl Wiederholungen</span>
+                <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    name="repeat_count"
+                    value="{{ rule.get('repeat_count', 0) }}"
+                >
+            </label>
+        </div>
+
+        <label class="checkbox-row">
+            <input
+                id="quiet-hours-enabled"
+                type="checkbox"
+                name="quiet_hours_enabled"
+                value="1"
+                {% if rule.get('quiet_hours_enabled') %}checked{% endif %}
+            >
+            <span>Ruhezeit aktivieren</span>
+        </label>
+
+        <div class="form-grid quiet-hours-fields" id="quiet-hours-fields">
+            <label class="field">
+                <span>Ruhezeit von</span>
+                <input type="time" name="quiet_start" value="{{ rule.get('quiet_start', '22:00') }}">
+            </label>
+
+            <label class="field">
+                <span>Ruhezeit bis</span>
+                <input type="time" name="quiet_end" value="{{ rule.get('quiet_end', '07:00') }}">
+            </label>
+        </div>
+
+        <small class="field-hint">
+            Ereignisse innerhalb der Ruhezeit werden nicht nachträglich gesendet.
+            Wiederholungen enden automatisch bei einer Recovery-Meldung.
+        </small>
+    </section>
+
+    {% set escalation_steps = rule.get('escalation_steps', []) %}
+    {% set escalation_1 = escalation_steps[0] if escalation_steps|length > 0 else {} %}
+    {% set escalation_2 = escalation_steps[1] if escalation_steps|length > 1 else {} %}
+    <section class="rule-target-section">
+        <h2>Eskalationskette</h2>
+        <p class="section-description">
+            Zusätzliche Beacons können zeitversetzt ausgelöst werden, solange der
+            Incident weiterhin offen und nicht quittiert ist.
+        </p>
+
+        <div class="escalation-step">
+            <strong>Stufe 1</strong>
+            <div class="form-grid">
+                <label class="field">
+                    <span>Nach Minuten</span>
+                    <input
+                        type="number"
+                        min="0"
+                        name="escalation_1_minutes"
+                        value="{{ escalation_1.get('after_minutes', 0) }}"
+                    >
+                </label>
+                <div class="field">
+                    <span>Beacons</span>
+                    <div class="multi-checkbox-grid">
+                        {% for channel in channels %}
+                        <label class="multi-checkbox-option">
+                            <input type="checkbox" name="escalation_1_channels" value="{{ channel.id }}" {% if channel.id in escalation_1.get('channels', []) %}checked{% endif %}>
+                            <span><strong>{{ channel.name }}</strong><small>{{ channel.type }}</small></span>
+                        </label>
+                        {% else %}<p class="empty-choice">Noch keine Beacons angelegt.</p>{% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="escalation-step">
+            <strong>Stufe 2</strong>
+            <div class="form-grid">
+                <label class="field">
+                    <span>Nach Minuten</span>
+                    <input
+                        type="number"
+                        min="0"
+                        name="escalation_2_minutes"
+                        value="{{ escalation_2.get('after_minutes', 0) }}"
+                    >
+                </label>
+                <div class="field">
+                    <span>Beacons</span>
+                    <div class="multi-checkbox-grid">
+                        {% for channel in channels %}
+                        <label class="multi-checkbox-option">
+                            <input type="checkbox" name="escalation_2_channels" value="{{ channel.id }}" {% if channel.id in escalation_2.get('channels', []) %}checked{% endif %}>
+                            <span><strong>{{ channel.name }}</strong><small>{{ channel.type }}</small></span>
+                        </label>
+                        {% else %}<p class="empty-choice">Noch keine Beacons angelegt.</p>{% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="rule-target-section rule-preview">
+        <h2>Nachrichten-Vorschau</h2>
+        <div class="notification-preview-card">
+            <strong id="preview-title">LANaxy-Warnung</strong>
+            <p id="preview-message">
+                Guardian: Beispiel-Guardian<br>
+                Status: warning<br>
+                Meldung: Beispielmeldung der ausgewählten Rule
+            </p>
+            <small id="preview-rule">Rule: {{ rule.get('name', 'Neue Rule') }}</small>
+        </div>
+    </section>
+
+    <section class="rule-final-options" aria-label="Rule-Optionen">
+        <label class="checkbox-row">
+            <input type="checkbox" name="root_cause_only" value="1"
+                   {% if rule.get('root_cause_only') %}checked{% endif %}>
+            <span>Nur Root Causes senden</span>
+        </label>
+
+        <label class="checkbox-row">
+            <input type="checkbox" name="enabled" value="1"
+                   {% if rule.get('enabled',true) %}checked{% endif %}>
+            <span>Rule aktiv</span>
+        </label>
+    </section>
+
+    <div class="form-actions">
+        <button class="button primary">Speichern</button>
+        <a class="button" href="{{ url_for('rules_page') }}">Abbrechen</a>
+    </div>
+</form>
+
+<script>
+function bindAllToggle(checkboxId, targetId) {
+    const checkbox = document.getElementById(checkboxId);
+    const target = document.getElementById(targetId);
+    if (!checkbox || !target) return;
+
+    function update() {
+        target.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.disabled = checkbox.checked;
+        });
+        target.closest(".field").classList.toggle("field-disabled", checkbox.checked);
+    }
+
+    checkbox.addEventListener("change", update);
+    update();
+}
+
+bindAllToggle("all-channels", "channels-select");
+bindAllToggle("all-guardians", "guardians-select");
+bindAllToggle("all-groups", "groups-select");
+
+const quietToggle = document.getElementById("quiet-hours-enabled");
+const quietFields = document.getElementById("quiet-hours-fields");
+
+function updateQuietHours() {
+    quietFields.classList.toggle("field-disabled", !quietToggle.checked);
+    quietFields.querySelectorAll("input").forEach(input => {
+        input.disabled = !quietToggle.checked;
+    });
+}
+
+quietToggle.addEventListener("change", updateQuietHours);
+updateQuietHours();
+
+const ruleNameInput = document.querySelector('input[name="name"]');
+const statusInputs = [...document.querySelectorAll('input[name="statuses"]')];
+const previewTitle = document.getElementById("preview-title");
+const previewMessage = document.getElementById("preview-message");
+const previewRule = document.getElementById("preview-rule");
+
+function updatePreview() {
+    const selectedStatus = statusInputs.find(input => input.checked)?.value || "warning";
+    const titles = {
+        warning: "LANaxy-Warnung",
+        critical: "Kritischer LANaxy-Fehler",
+        recovery: "LANaxy-Wiederherstellung",
+    };
+    previewTitle.textContent = titles[selectedStatus] || "LANaxy-Ereignis";
+    previewMessage.innerHTML = `
+        Guardian: Beispiel-Guardian<br>
+        Status: ${selectedStatus}<br>
+        Meldung: Beispielmeldung der ausgewählten Rule
+        ${selectedStatus === "recovery" ? "<br>Ausfalldauer: 12 Min." : ""}
+    `;
+    previewRule.textContent = `Rule: ${ruleNameInput.value || "Neue Rule"}`;
+}
+
+ruleNameInput.addEventListener("input", updatePreview);
+statusInputs.forEach(input => input.addEventListener("change", updatePreview));
+updatePreview();
+</script>
+{% endblock %}

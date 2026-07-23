@@ -1,0 +1,15 @@
+{% macro launchpad_progress(step_number) %}
+<nav class="launchpad-progress" aria-label="Launchpad-Fortschritt">
+    {% for number, label in [
+        (1, 'Guardian'),
+        (2, 'Beacon'),
+        (3, 'Rules'),
+        (4, 'Fertig')
+    ] %}
+    <div class="launchpad-progress-step {{ 'active' if number == step_number else ('done' if number < step_number else '') }}">
+        <span>{{ number }}</span>
+        <strong>{{ label }}</strong>
+    </div>
+    {% endfor %}
+</nav>
+{% endmacro %}

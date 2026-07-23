@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="dashboard-heading"><div><h1>System-MQTT</h1><p>LANaxy-Status und Systemdaten veröffentlichen</p></div></section>
+<form method="post" class="config-form" id="system-mqtt-form">
+<input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+<label class="toggle-row system-mqtt-enable"><input type="checkbox" name="enabled" value="1" {% if mqtt.get('enabled', false) %}checked{% endif %}> System-MQTT aktivieren</label>
+<p class="field-hint">Ohne Aktivierung bleibt MQTT vollständig optional. LANaxy arbeitet dann ohne Broker weiter.</p>
+<div class="form-grid" id="system-mqtt-fields">
+<label class="field"><span>Host *</span><input name="host" value="{{ mqtt.get('host','') }}" data-required-when-enabled></label>
+<label class="field"><span>Port *</span><input type="number" name="port" value="{{ mqtt.get('port',1883) }}" required></label>
+<label class="field"><span>Benutzername</span><input name="user" value="{{ mqtt.get('user','') }}"></label>
+<label class="field"><span>Passwort</span><input type="password" name="password" value="{{ secret_placeholder if mqtt.get('password') else '' }}"></label>
+<label class="field"><span>Base Topic *</span><input name="base_topic" value="{{ mqtt.get('base_topic','lanaxy') }}" data-required-when-enabled></label>
+<label class="field"><span>Keepalive</span><input type="number" name="keepalive" value="{{ mqtt.get('keepalive',60) }}"></label>
+<label class="field"><span>Home-Assistant Discovery Prefix</span><input name="discovery_prefix" value="{{ mqtt.get('discovery_prefix','homeassistant') }}"></label>
+</div>
+<label class="toggle-row"><input type="checkbox" name="retain" value="1" {% if mqtt.get('retain',true) %}checked{% endif %}>Retain verwenden</label>
+<label class="toggle-row"><input type="checkbox" name="homeassistant_discovery" value="1" {% if mqtt.get('homeassistant_discovery',true) %}checked{% endif %}>Home Assistant MQTT Autodiscovery aktivieren</label>
+<div class="form-actions"><button class="button primary">Speichern und neu starten</button><a class="button" href="{{ url_for('system_page') }}">Abbrechen</a></div>
+</form>
+<script>
+(() => {
+    const enabled = document.querySelector('[name="enabled"]');
+    const fields = document.getElementById('system-mqtt-fields');
+    if (!enabled || !fields) return;
+    const update = () => {
+        fields.classList.toggle('is-disabled', !enabled.checked);
+        fields.querySelectorAll('[data-required-when-enabled]').forEach(input => {
+            input.required = enabled.checked;
+        });
+    };
+    enabled.addEventListener('change', update);
+    update();
+})();
+</script>
+{% endblock %}

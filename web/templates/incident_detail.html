@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Incident #{{ incident.id }} · {{ app_name }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs">
+    <a href="{{ url_for('incidents_page') }}">Incidents</a><span>›</span><span>#{{ incident.id }}</span>
+</nav>
+<section class="dashboard-heading">
+    <div>
+        <p class="eyebrow">Root Cause</p>
+        <h1>{{ incident.guardian_name or incident.guardian_id }}</h1>
+        <p>Incident #{{ incident.id }} · {{ incident.started_at|replace('T', ' ') }}</p>
+    </div>
+    <div class="heading-actions">
+        <a class="button" href="{{ url_for('guardian_detail', check_id=incident.guardian_id) }}">Guardian öffnen</a>
+    </div>
+</section>
+<section class="incident-detail-grid">
+    <article class="chart-card">
+        <h2>Incident-Zustand</h2>
+        <dl class="system-facts">
+            <div><dt>Status</dt><dd>{{ 'Offen' if incident.status == 'open' else 'Beendet' }}</dd></div>
+            <div><dt>Schweregrad</dt><dd>{{ incident.severity }}</dd></div>
+            <div><dt>Beginn</dt><dd>{{ incident.started_at|replace('T', ' ') }}</dd></div>
+            <div><dt>Ende</dt><dd>{{ incident.resolved_at|replace('T', ' ') if incident.resolved_at else 'Noch offen' }}</dd></div>
+            <div><dt>Betroffene Systeme</dt><dd>{{ incident.affected_count }}</dd></div>
+            <div><dt>Benachrichtigungen</dt><dd>{{ incident.notification_count }}</dd></div>
+        </dl>
+        <p class="incident-detail-message"><strong>Ursache:</strong> {{ incident.message }}</p>
+        <form method="post" action="{{ url_for('incident_metadata', incident_id=incident.id) }}" class="maintenance-form-stack"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><label><span>Priorität</span><select name="priority">{% for p in ['low','normal','high','critical'] %}<option value="{{p}}" {% if incident.priority==p %}selected{% endif %}>{{p}}</option>{% endfor %}</select></label><label><span>Verantwortlicher</span><input name="assignee" value="{{incident.assignee}}"></label><button class="button">Zuordnung speichern</button></form>
+    </article>
+    <article class="chart-card">
+        <h2>Bearbeitung</h2>
+        {% if incident.acknowledged_at %}
+        <dl class="system-facts"><div><dt>Quittiert</dt><dd>{{ incident.acknowledged_at|replace('T', ' ') }}</dd></div><div><dt>Von</dt><dd>{{ incident.acknowledged_by or 'Unbekannt' }}</dd></div></dl>
+        <p>{{ incident.acknowledge_note or 'Keine Notiz hinterlegt.' }}</p>
+        {% elif incident.status == 'open' %}
+        <div class="incident-acknowledge-panel">
+            <h3>Incident quittieren</h3>
+            <p>Bestätigt, dass der Incident gesehen wurde. Der Incident bleibt offen, bis der Guardian wieder einen gesunden Zustand meldet.</p>
+            <form method="post" action="{{ url_for('incident_acknowledge', incident_id=incident.id) }}" class="maintenance-form-stack">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <label><span>Optionale Quittierungsnotiz</span><input name="note" placeholder="Beispiel: Fehler geprüft, Zertifikat wird erneuert"></label>
+                <button class="button primary" type="submit">Incident quittieren</button>
+            </form>
+        </div>
+        {% else %}<p>Der Incident ist beendet.</p>{% endif %}
+        <section id="incident-notes" class="incident-notes-panel">
+            <h3>Bearbeitungsnotizen</h3>
+            {% if incident_notes %}
+            <div class="incident-note-list">
+                {% for note in incident_notes %}
+                <article class="incident-note-item">
+                    <div><strong>{{ note.actor or 'Unbekannt' }}</strong><time>{{ note.timestamp|replace('T', ' ') }}</time></div>
+                    <p>{{ note.message }}</p>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="muted">Noch keine Bearbeitungsnotizen vorhanden.</p>
+            {% endif %}
+            <form method="post" action="{{ url_for('incident_add_note', incident_id=incident.id) }}" class="maintenance-form-stack">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <label><span>Neue Notiz</span><textarea name="note" rows="3" required placeholder="Analyse, Maßnahme oder Zwischenstand …"></textarea></label>
+                <button class="button">Notiz hinzufügen</button>
+            </form>
+        </section>
+    </article>
+</section>
+<section class="incident-intelligence-grid">
+    <article class="chart-card">
+        <div class="dashboard-panel-heading"><div><h2>Incident-Intelligenz</h2><p>Wiederholung und Korrelation</p></div></div>
+        <dl class="system-facts">
+            <div><dt>Wiederholung</dt><dd>{{ incident.get('recurrence_count', 1) }}. Auftreten innerhalb der Kette</dd></div>
+            <div><dt>Vorheriger Incident</dt><dd>{% if incident.get('previous_incident_id') %}<a href="{{ url_for('incident_detail', incident_id=incident.previous_incident_id) }}">#{{ incident.previous_incident_id }}</a>{% else %}Keiner{% endif %}</dd></div>
+            <div><dt>Korrelationsschlüssel</dt><dd><code>{{ incident.get('correlation_key') or incident.guardian_id }}</code></dd></div>
+        </dl>
+    </article>
+    <article class="chart-card">
+        <div class="dashboard-panel-heading"><div><h2>Mögliche übergeordnete Ursachen</h2><p>Aus der Abhängigkeitskette</p></div></div>
+        {% if root_cause_candidates %}<div class="candidate-list">{% for candidate in root_cause_candidates %}<a href="{{ url_for('guardian_detail', check_id=candidate.id) }}"><strong>{{ candidate.name }}</strong><small>{{ candidate.id }}</small></a>{% endfor %}</div>{% else %}<p>Keine übergeordneten Abhängigkeiten konfiguriert.</p>{% endif %}
+    </article>
+</section>
+<section class="chart-card"><h2>Root-Cause-Analyse</h2><p><strong>Signatur:</strong> <code>{{ incident_signature }}</code></p>{% if root_causes %}<div class="root-cause-list">{% for c in root_causes %}<article class="root-cause-row"><span class="status-badge {{ c.status }}">{{ c.status|upper }}</span><div><strong>{{ c.guardian_name }}</strong><small>{{ c.reason }} · Ebene {{ c.depth }} · Bewertung {{ c.score }}</small></div></article>{% endfor %}</div>{% else %}<p>Keine übergeordneten Abhängigkeiten als Ursache ermittelt. Dieser Guardian ist wahrscheinlich selbst die Root Cause.</p>{% endif %}</section>
+
+
+{% if incident.members %}
+<article class="chart-card">
+    <div class="dashboard-panel-heading"><div><h2>Betroffene Systeme</h2><p>Folgefehler, die dieser Ursache zugeordnet wurden</p></div></div>
+    <div class="incident-impact-tree">
+        <div class="impact-root"><span class="incident-severity-dot"></span><div><strong>{{ incident.guardian_name or incident.guardian_id }}</strong><small>Primäre Ursache</small></div></div>
+        {% for member in incident.members %}
+        <div class="impact-member status-{{ member.status }}"><span class="impact-branch">└─</span><div><a href="{{ url_for('guardian_detail', check_id=member.guardian_id) }}"><strong>{{ member.guardian_name or member.guardian_id }}</strong></a><small>{{ member.message }} · {{ 'Wiederhergestellt' if member.status == 'resolved' else 'Blockiert' }}</small></div><form method="post" action="{{url_for('incident_split',incident_id=incident.id)}}"><input type="hidden" name="_csrf_token" value="{{csrf_token()}}"><input type="hidden" name="guardian_id" value="{{member.guardian_id}}"><button class="button" type="submit">Abtrennen</button></form></div>
+        {% endfor %}
+    </div>
+</article>
+{% endif %}
+<article class="chart-card">
+    <div class="dashboard-panel-heading"><div><h2>Timeline</h2><p>Statuswechsel, Wartungen, Notizen und Wiederherstellungen</p></div></div>
+    <div class="incident-timeline">
+    {% for item in incident.timeline %}
+        <div class="timeline-entry timeline-{{ item.event_kind }}">
+            <span class="timeline-dot"></span>
+            <div class="timeline-content"><div><strong>{{ item.guardian_name or item.guardian_id or 'Incident' }}</strong><time>{{ item.timestamp|replace('T', ' ') }}</time></div><p>{{ item.message }}</p>{% if item.actor %}<small>Von {{ item.actor }}</small>{% endif %}</div>
+        </div>
+    {% else %}<p>Noch keine Timeline-Einträge.</p>{% endfor %}
+    </div>
+</article>
+<article class="chart-card">
+    <div class="dashboard-panel-heading"><div><h2>Versandhistorie</h2><p>Welche Rule welchen Beacon ausgelöst hat</p></div></div>
+    <div class="table-scroll"><table class="protocol-table incident-delivery-table"><thead><tr><th>Zeit</th><th>Rule</th><th>Beacon</th><th>Typ</th><th>Ergebnis</th><th>Fehler</th></tr></thead><tbody>
+    {% for delivery in deliveries %}<tr><td class="nowrap" data-lanaxy-datetime="{{ delivery.timestamp }}">{{ delivery.timestamp }}</td><td>{{ delivery.rule_name or delivery.rule_id }}</td><td>{{ delivery.channel_name or delivery.channel_id }}</td><td>{{ delivery.channel_type }}</td><td><span class="log-level level-{{ 0 if delivery.success else 2 }}">{{ 'Erfolgreich' if delivery.success else 'Fehlgeschlagen' }}</span></td><td>{{ delivery.error or '—' }}</td></tr>
+    {% else %}<tr><td colspan="6" class="empty-cell">Noch keine Beacon-Versände.</td></tr>{% endfor %}
+    </tbody></table></div>
+</article>
+{% endblock %}

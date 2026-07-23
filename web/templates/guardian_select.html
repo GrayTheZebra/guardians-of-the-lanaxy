@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Guardian hinzufügen · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-heading">
+    <div>
+        <p class="eyebrow">Neuer Guardian</p>
+        <h1>Guardian-Typ wählen</h1>
+        <p>Das Formular passt sich automatisch an den gewählten Guardian an.</p>
+    </div>
+</div>
+
+<div class="guardian-catalog-toolbar">
+    <label class="guardian-search">
+        <span class="sr-only">Guardians durchsuchen</span>
+        <input type="search" data-guardian-search placeholder="Guardians durchsuchen …" autocomplete="off">
+    </label>
+</div>
+
+<div class="guardian-category-list" data-guardian-catalog="manager">
+{% for group in guardian_groups %}
+<details class="guardian-category guardian-category-{{ group.key }}" data-category="{{ group.key }}" open>
+    <summary>
+        <span>{{ group.label }}</span>
+        <span class="guardian-category-count" data-category-count>{{ group["items"]|length }}</span>
+    </summary>
+    <section class="type-grid guardian-category-grid">
+    {% for guardian in group["items"] %}
+        <a class="type-card guardian-catalog-card guardian-type-card guardian-type-card-{{ group.key }}"
+           data-search="{{ (guardian.name ~ ' ' ~ guardian.description ~ ' ' ~ group.label)|lower }}"
+           href="{{ url_for('add_guardian', type=guardian.module) }}">
+            <span class="guardian-icon large" title="{{ guardian.get('icon', 'shield') }}">{{ guardian.get('icon', 'shield')|upper }}</span>
+            <h2>{{ guardian.name }}</h2>
+            <p>{{ guardian.description }}</p>
+            <small>{{ group.label }}</small>
+        </a>
+    {% endfor %}
+    </section>
+</details>
+{% endfor %}
+<div class="empty-state guardian-search-empty" hidden>
+    <h3>Keine passenden Guardians</h3>
+    <p>Ändere den Suchbegriff oder lösche die Suche.</p>
+</div>
+</div>
+<script src="{{ url_for('static', filename='guardian_catalog.js') }}"></script>
+{% endblock %}

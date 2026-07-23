@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Guardian-Typen · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="dashboard-heading">
+  <div>
+    <p class="eyebrow">Guardian-Katalog</p>
+    <h1>Guardian-Typ wählen</h1>
+    <p>Wähle einen Guardian aus. Das Formular passt sich automatisch an den gewählten Typ an.</p>
+  </div>
+  <div class="heading-actions">
+    <a class="button" href="{{ url_for('guardian_management') }}">Guardian-Instanzen</a>
+    <a class="button" href="{{ url_for('custom_guardian_template') }}">Paketvorlage (ZIP)</a>
+    <a class="button primary" href="{{ url_for('custom_guardian_import') }}">Plugin-Paket importieren</a>
+  </div>
+</section>
+
+<div class="guardian-catalog-toolbar">
+  <label class="guardian-search">
+    <span class="sr-only">Guardian-Typen durchsuchen</span>
+    <input type="search" data-guardian-search placeholder="Guardian-Typen durchsuchen …" autocomplete="off">
+  </label>
+  <span class="guardian-catalog-total">{{ guardian_count }} Typen</span>
+</div>
+
+<div class="guardian-category-list" data-guardian-catalog="types">
+{% for group in guardian_groups %}
+<details class="guardian-category guardian-category-{{ group.key }}" data-category="{{ group.key }}" open>
+  <summary>
+    <span>{{ group.label }}</span>
+    <span class="guardian-category-count" data-category-count>{{ group["items"]|length }}</span>
+  </summary>
+  <section class="type-grid guardian-category-grid">
+  {% for guardian in group["items"] %}
+    <article class="type-card guardian-catalog-card guardian-type-card guardian-type-card-{{ group.key }}"
+             data-search="{{ ((guardian.get('name', guardian.module)) ~ ' ' ~ (guardian.get('description') or guardian.get('error') or '') ~ ' ' ~ group.label)|lower }}">
+      <a class="guardian-type-card-link" href="{{ url_for('add_guardian', type=guardian.module) }}">
+        <span class="guardian-icon large" title="{{ guardian.get('icon', 'shield') }}">{{ guardian.get('icon', 'shield')|upper }}</span>
+        <h2>{{ guardian.get('name', guardian.module) }}</h2>
+        <p>{{ guardian.get('description') or guardian.get('error') or 'Keine Beschreibung vorhanden.' }}</p>
+        <small>{{ group.label }}</small>
+      </a>
+      {% if guardian.get('source') == 'custom' %}
+      <div class="guardian-type-admin-actions">
+        <span class="source-badge custom">Custom</span>
+        <a class="button" href="{{ url_for('custom_guardian_export', name=guardian.module.split(':', 1)[-1]) }}">Paket exportieren</a>
+        <form method="post" action="{{ url_for('custom_guardian_delete', name=guardian.module.split(':', 1)[-1]) }}" onsubmit="return confirm('Custom Guardian wirklich löschen?')">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button class="button danger" type="submit">Löschen</button>
+        </form>
+      </div>
+      {% else %}
+      <span class="source-badge builtin guardian-type-source">Integriert</span>
+      {% endif %}
+    </article>
+  {% endfor %}
+  </section>
+</details>
+{% endfor %}
+<div class="empty-state guardian-search-empty" hidden>
+  <h3>Keine passenden Guardians</h3>
+  <p>Ändere den Suchbegriff oder lösche die Suche.</p>
+</div>
+</div>
+<script src="{{ url_for('static', filename='guardian_catalog.js') }}"></script>
+{% endblock %}

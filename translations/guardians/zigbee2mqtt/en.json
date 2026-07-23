@@ -1,0 +1,24 @@
+{
+  "name": "Zigbee2MQTT Guardian",
+  "description": "Monitors Zigbee2MQTT, MQTT and the coordinator.",
+  "fields": {
+    "name": {
+      "label": "Name"
+    },
+    "id": {
+      "label": "Guardian ID"
+    },
+    "device_id": {
+      "label": "Device ID"
+    },
+    "interval": {
+      "label": "Interval (seconds)"
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    },
+    "retries": {
+      "label": "Failures before critical"
+    }
+  }
+}

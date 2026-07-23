@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Proxmox-Assistent · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Erkennung</p><h1>Proxmox-Assistent</h1><p>Nodes, VMs, LXCs und Storages gesammelt erkennen und als Guardians übernehmen.</p></div>
+  <a class="button" href="{{ url_for('guardian_management') }}">Zurück</a>
+</div>
+
+<section class="card assistant-source-card">
+  <form method="get" class="assistant-source-form">
+    <label class="field"><span>Proxmox API Guardian</span>
+      <select name="source" required>
+        <option value="">Quelle auswählen …</option>
+        {% for source in sources %}
+        <option value="{{ source.id }}" {% if source.id == source_id %}selected{% endif %}>{{ source.name }} · {{ source.get('api_url') }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field"><span>MiniGuard für Hardwareinventar</span><select name="miniguard"><option value="">Nur Proxmox API</option>{% for agent in agents %}<option value="{{ agent.id }}" {% if agent.id == miniguard_id %}selected{% endif %}>{{ agent.name }}{% if not agent.online %} · offline{% endif %}</option>{% endfor %}</select></label>
+    <button class="button primary" type="submit">Proxmox vollständig durchsuchen</button>
+  </form>
+  {% if not sources %}
+  <div class="assistant-empty-state">
+    <div><strong>Noch kein Proxmox API Guardian vorhanden</strong><p>Lege zuerst die Verbindung zu Proxmox VE an. Danach kehrst du automatisch zu diesem Assistenten zurück.</p></div>
+    <a class="button primary" href="{{ url_for('add_guardian', type='proxmox_api', return_to=url_for('proxmox_assistant')) }}">Proxmox Guardian anlegen</a>
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="assistant-api-error" role="alert">
+    <div class="assistant-api-error__body">
+      <strong>{{ error.title }}</strong>
+      <p>{{ error.explanation }}</p>
+      <p class="assistant-api-error__hint">{{ error.hint }}</p>
+      <details><summary>Technische Meldung</summary><code>{{ error.technical }}</code></details>
+    </div>
+    {% if error.source_id %}
+    <a class="button danger" href="{{ url_for('edit_guardian', check_id=error.source_id) }}">{{ error.source_name }} bearbeiten</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+{% if scan %}
+<form method="post" action="{{ url_for('proxmox_assistant_apply') }}" class="proxmox-assistant-results">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="source_id" value="{{ source_id }}">
+
+  <section class="assistant-options card">
+    <h2>Anlageoptionen</h2>
+    <div class="form-grid">
+      <label class="field"><span>Gruppe</span><input name="group" value="Proxmox"></label>
+      <label class="field"><span>Tags</span><input name="tags" value="proxmox"></label>
+      <label class="field"><span>MiniGuard für Hardwareprüfungen</span>
+        <select name="miniguard_id" id="assistant-miniguard"><option value="">Nicht anlegen</option>{% for agent in agents %}<option value="{{ agent.id }}" {% if agent.id == miniguard_id %}selected{% endif %}>{{ agent.name }}{% if not agent.online %} · offline{% endif %}</option>{% endfor %}</select>
+        <small class="field-hint">Für Updates-/Neustart- und ZFS-/RAID-Prüfungen ist ein MiniGuard auf dem Proxmox-Host erforderlich.</small>
+      </label>
+    </div>
+    <div class="assistant-toggle-row">
+      <label><input type="checkbox" name="update_existing" value="1"> Bereits vorhandene Guardians mit erkannten Daten aktualisieren</label>
+      <label><input type="checkbox" name="create_dependencies" value="1" checked> Gäste und Storages vom jeweiligen Node abhängig machen</label>
+      <label><input type="checkbox" id="create-updates" name="create_updates" value="1"> Updates-/Neustart-Guardian anlegen</label>
+      <label><input type="checkbox" id="create-zfs" name="create_zfs" value="1"> ZFS-/RAID-Guardian anlegen</label>
+    </div>
+  </section>
+
+  <div class="assistant-object-grid">
+    <section class="guardian-form-section guardian-form-section--node">
+      <div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-server"/></svg></span><div><h2>Nodes</h2><p>{{ scan.nodes|length }} gefunden</p></div></div>
+      <div class="assistant-check-list">
+      {% for node in scan.nodes %}
+        <label><input type="checkbox" name="objects" value="node|{{ node.name }}" {% if ('node|' ~ node.name) not in existing_keys %}checked{% endif %}><span><strong>{{ node.name }} {% if ('node|' ~ node.name) in existing_keys %}<span class="badge ok">vorhanden</span>{% endif %}</strong><small>{{ node.status or 'Status unbekannt' }}</small></span></label>
+      {% endfor %}
+      </div>
+    </section>
+
+    <section class="guardian-form-section guardian-form-section--guest">
+      <div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-container"/></svg></span><div><h2>VMs und LXCs</h2><p>{{ scan.guests|length }} gefunden</p></div></div>
+      <div class="assistant-check-list assistant-check-list--scroll">
+      {% for guest in scan.guests %}
+        <label><input type="checkbox" name="objects" value="guest|{{ guest.node }}|{{ guest.type }}|{{ guest.vmid }}|{{ guest.name }}"><span><strong>{{ guest.type_label }} {{ guest.vmid }} · {{ guest.name }} {% if ('guest|' ~ guest.node ~ '|' ~ guest.type ~ '|' ~ guest.vmid) in existing_keys %}<span class="badge ok">vorhanden</span>{% endif %}</strong><small>{{ guest.node }} · {{ guest.status or 'unbekannt' }}</small></span></label>
+      {% endfor %}
+      </div>
+    </section>
+
+    <section class="guardian-form-section guardian-form-section--storage">
+      <div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-database"/></svg></span><div><h2>Storages</h2><p>{{ scan.storages|length }} gefunden</p></div></div>
+      <div class="assistant-check-list assistant-check-list--scroll">
+      {% for storage in scan.storages %}
+        <label><input type="checkbox" name="objects" value="storage|{{ storage.node }}|{{ storage.storage }}"><span><strong>{{ storage.storage }} {% if ('storage|' ~ storage.node ~ '|' ~ storage.storage) in existing_keys %}<span class="badge ok">vorhanden</span>{% endif %}</strong><small>{{ storage.node }} · {{ storage.type or 'Typ unbekannt' }}{% if storage.used_percent is not none %} · {{ storage.used_percent }} %{% endif %}</small></span></label>
+      {% endfor %}
+      </div>
+    </section>
+  </div>
+  {% set hw=scan.hardware or {} %}
+  {% if miniguard_id %}
+  <h2 class="assistant-section-heading">Hardwareinventar</h2><div class="assistant-object-grid">
+    <section class="guardian-form-section guardian-form-section--node"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-usb"/></svg></span><div><h2>USB</h2><p>{{ hw.get('usb',[])|length }} gefunden</p></div></div><div class="assistant-check-list assistant-check-list--scroll">{% for x in hw.get('usb',[]) %}{% set label=x.get('display_name') or x.get('model_name') or x.get('description') or (x.vendor_id ~ ':' ~ x.product_id) %}<label><input type="checkbox" name="objects" value="usb|{{ x.vendor_id }}|{{ x.product_id }}|{{ label|replace('|','/') }}|{{ x.get('serial_number','')|replace('|','/') }}|{{ x.get('serial_path','')|replace('|','/') }}"><span><strong>{{ label }}</strong><small>{{ x.vendor_id }}:{{ x.product_id }}{% if x.get('serial_number') %} · S/N {{ x.serial_number }}{% endif %}</small></span></label>{% endfor %}</div></section>
+    <section class="guardian-form-section guardian-form-section--guest"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-cpu"/></svg></span><div><h2>PCI</h2><p>{{ hw.get('pci',[])|length }} gefunden</p></div></div><div class="assistant-check-list assistant-check-list--scroll">{% for x in hw.get('pci',[]) %}<label><input type="checkbox" name="objects" value="pci|{{ x.address }}|{{ x.description|replace('|','/') }}"><span><strong>{{ x.address }}</strong><small>{{ x.description }}</small></span></label>{% endfor %}</div></section>
+    <section class="guardian-form-section guardian-form-section--storage"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-hard-drive"/></svg></span><div><h2>SMART-Datenträger</h2><p>{{ hw.get('disks',[])|length }} gefunden</p></div></div><div class="assistant-check-list assistant-check-list--scroll">{% for x in hw.get('disks',[]) %}<label><input type="checkbox" name="objects" value="disk|{{ x.path }}|{{ (x.model or x.name)|replace('|','/') }}"><span><strong>{{ x.path }}</strong><small>{{ x.model or x.name }} · {{ x.serial or 'ohne Seriennummer' }}</small></span></label>{% endfor %}</div></section>
+    <section class="guardian-form-section guardian-form-section--node-check"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-database"/></svg></span><div><h2>ZFS-Pools</h2><p>{{ hw.get('zfs_pools',[])|length }} gefunden</p></div></div><div class="assistant-check-list">{% for x in hw.get('zfs_pools',[]) %}<label><input type="checkbox" name="objects" value="zfs|{{ x.name }}"><span><strong>{{ x.name }}</strong><small>{{ x.health }} · {{ x.allocated }} belegt</small></span></label>{% endfor %}</div></section>
+    <section class="guardian-form-section guardian-form-section--datastore"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-archive"/></svg></span><div><h2>Backup-Dateien</h2><p>{{ hw.get('backup_files',[])|length }} gefunden</p></div></div><div class="assistant-check-list assistant-check-list--scroll">{% for x in hw.get('backup_files',[])[:50] %}<label><input type="checkbox" name="objects" value="backup|{{ x.path }}"><span><strong>{{ x.path.split('/')[-1] }}</strong><small>{{ x.modified }} · {{ x.size_bytes }} Bytes</small></span></label>{% endfor %}</div></section>
+  </div>{% endif %}
+  {% if scan.backups %}<section class="guardian-form-section guardian-form-section--datastore"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-archive"/></svg></span><div><h2>Proxmox-Backups</h2><p>{{ scan.backups|length }} Einträge über die API gefunden</p></div></div><div class="assistant-check-list assistant-check-list--scroll">{% for x in scan.backups %}<div class="assistant-readonly-item"><strong>{{ x.volid }}</strong><small>{{ x.node }} · {{ x.storage }} · {{ x.size }} Bytes</small></div>{% endfor %}</div></section>{% endif %}
+  {% if scan.passthrough.get('usb') or scan.passthrough.get('pci') %}<section class="guardian-form-section guardian-form-section--guest"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-usb"/></svg></span><div><h2>Passthrough-Zuordnungen</h2><p>Direkt aus den VM-/LXC-Konfigurationen gelesen</p></div></div><div class="assistant-check-list">{% for x in scan.passthrough.get('usb',[]) %}<div class="assistant-readonly-item"><strong>{{ x.guest.type_label }} {{ x.guest.vmid }} · {{ x.guest.name }}</strong><small>{{ x.assignment.key }}: {{ x.assignment.value }}</small></div>{% endfor %}{% for x in scan.passthrough.get('pci',[]) %}<div class="assistant-readonly-item"><strong>{{ x.guest.type_label }} {{ x.guest.vmid }} · {{ x.guest.name }}</strong><small>{{ x.assignment.key }}: {{ x.assignment.value }}</small></div>{% endfor %}</div></section>{% endif %}
+  {% if scan.backup_jobs or scan.backup_summary %}<div class="assistant-object-grid"><section class="guardian-form-section guardian-form-section--datastore"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-archive"/></svg></span><div><h2>Backup-Jobs</h2><p>{{ scan.backup_jobs|length }} gefunden</p></div></div><div class="assistant-check-list">{% for job in scan.backup_jobs %}<div class="assistant-readonly-item"><strong>{{ job.job_id }}</strong><small>{{ job.storage or 'Storage unbekannt' }} · {{ 'aktiv' if job.enabled else 'deaktiviert' }} · {{ job.schedule or 'kein Zeitplan' }}</small></div>{% endfor %}</div></section><section class="guardian-form-section guardian-form-section--storage"><div class="guardian-form-section__header"><span class="guardian-form-section__icon"><svg><use href="#icon-clock"/></svg></span><div><h2>Letzte Gast-Backups</h2><p>{{ scan.backup_summary|length }} Gäste erkannt</p></div></div><div class="assistant-check-list">{% for item in scan.backup_summary %}<div class="assistant-readonly-item"><strong>{{ item.guest_type|upper }} {{ item.vmid }}</strong><small>{{ item.storage }} · {{ item.volid }} · {{ item.ctime|format_timestamp if item.ctime else 'Zeit unbekannt' }}</small></div>{% endfor %}</div></section></div>{% endif %}
+  <div class="form-actions"><button class="button primary" type="submit">Auswahl prüfen und Vorschau öffnen</button></div>
+</form>
+<script>
+(() => {
+  const miniguard = document.getElementById("assistant-miniguard");
+  const options = [
+    document.getElementById("create-updates"),
+    document.getElementById("create-zfs")
+  ].filter(Boolean);
+  if (!miniguard || !options.length) return;
+
+  const availableAgents = () => Array.from(miniguard.options).filter(option => option.value);
+
+  options.forEach(option => {
+    option.addEventListener("change", () => {
+      if (!option.checked || miniguard.value) return;
+      const agents = availableAgents();
+      if (agents.length) {
+        miniguard.value = agents[0].value;
+        window.showToast?.(
+          `MiniGuard „${agents[0].textContent.trim()}“ wurde automatisch ausgewählt.`,
+          "success"
+        );
+        return;
+      }
+      option.checked = false;
+      window.showToast?.(
+        "Für diese Prüfung muss zuerst ein MiniGuard eingerichtet werden.",
+        "warning"
+      );
+    });
+  });
+
+  miniguard.addEventListener("change", () => {
+    if (miniguard.value) return;
+    const checked = options.filter(option => option.checked);
+    if (!checked.length) return;
+    checked.forEach(option => option.checked = false);
+    window.showToast?.(
+      "Updates-/Neustart- und ZFS-/RAID-Prüfungen wurden abgewählt, weil kein MiniGuard ausgewählt ist.",
+      "warning"
+    );
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

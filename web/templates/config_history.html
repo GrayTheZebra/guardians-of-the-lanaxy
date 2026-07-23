@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Konfigurationshistorie · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-heading">
+    <div>
+        <p class="eyebrow">System</p>
+        <h1>Konfigurationshistorie</h1>
+        <p>Automatisch erzeugte Stände vor jeder Änderung.</p>
+    </div>
+</div>
+<section class="chart-card">
+    <div class="history-list config-history-list">
+        {% for e in entries %}
+        <article class="history-row config-history-row">
+            <div class="config-history-main">
+                <strong>{{ e.name }}</strong>
+                <small>
+                    {{ e.modified }} · {{ e.size }} Bytes
+                    {% if e.meta %}
+                        · {{ e.meta.guardians|default(0) }} Guardians
+                        · {{ e.meta.beacons|default(0) }} Beacons
+                        · {{ e.meta.rules|default(0) }} Rules
+                        · {{ e.meta.portals|default(0) }} Portals
+                    {% endif %}
+                </small>
+                {% if e.meta %}
+                <div class="config-history-inventory">
+                    <div>
+                        <span>Guardians</span>
+                        <p>{{ e.meta.guardian_names|default([])|join(', ') if e.meta.guardian_names|default([]) else 'Keine' }}</p>
+                    </div>
+                    <div>
+                        <span>Beacons</span>
+                        <p>{{ e.meta.beacon_names|default([])|join(', ') if e.meta.beacon_names|default([]) else 'Keine' }}</p>
+                    </div>
+                    <div>
+                        <span>Rules</span>
+                        <p>{{ e.meta.rule_names|default([])|join(', ') if e.meta.rule_names|default([]) else 'Keine' }}</p>
+                    </div>
+                    <div>
+                        <span>Portals</span>
+                        <p>{{ e.meta.portal_names|default([])|join(', ') if e.meta.portal_names|default([]) else 'Keine' }}</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            <div class="form-actions">
+                <a class="button" href="{{ url_for('config_history_diff', name=e.name) }}">Änderungen</a>
+                <a class="button" href="{{ url_for('config_history_download', name=e.name) }}">Herunterladen</a>
+                <form method="post" action="{{ url_for('config_history_restore', name=e.name) }}" onsubmit="return confirm('Diesen Konfigurationsstand wiederherstellen? Der aktuelle Stand wird vorher erneut gesichert.')">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button class="button danger">Wiederherstellen</button>
+                </form>
+            </div>
+        </article>
+        {% else %}
+        <p>Noch keine historischen Stände vorhanden.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

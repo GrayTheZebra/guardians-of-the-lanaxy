@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_launchpad_progress.html" import launchpad_progress %}
+{% block title %}Rules · Launchpad{% endblock %}
+{% block content %}
+{{ launchpad_progress(3) }}
+
+<section class="launchpad-heading">
+    <div>
+        <p class="eyebrow">Launchpad</p>
+        <h1>Wann soll LANaxy benachrichtigen?</h1>
+        <p>Nutze die Standard-Rule, eine vorhandene Rule oder erstelle eine eigene.</p>
+    </div>
+</section>
+
+<section class="launchpad-explanation">
+    <span class="launchpad-explanation-icon">?</span>
+    <div>
+        <h2>Was macht eine Rule?</h2>
+        <p>
+            Eine Rule verbindet Guardian und Beacon. Sie legt fest, bei welchen
+            Zuständen eine Meldung versendet wird und ob Verzögerungen,
+            Wiederholungen oder Ruhezeiten gelten. Für den einfachen Einstieg
+            reicht die empfohlene Default-Rule.
+        </p>
+    </div>
+</section>
+
+<form method="post" class="config-form launchpad-choice-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label class="launchpad-choice recommended">
+        <input type="radio" name="mode" value="default"
+               {% if selected_mode == 'default' %}checked{% endif %}>
+        <span>
+            <strong>Standard-Rule verwenden</strong>
+            <small>
+                Meldet Warning, Critical und Recovery an alle Beacons.
+                Auch künftig neue Guardians und Beacons sind automatisch enthalten.
+            </small>
+        </span>
+        <b>Empfohlen</b>
+    </label>
+
+    {% if rules %}
+    <label class="launchpad-choice">
+        <input type="radio" name="mode" value="existing"
+               {% if selected_mode == 'existing' %}checked{% endif %}>
+        <span>
+            <strong>Vorhandene Rule verwenden</strong>
+            <small>Der neue Guardian wird bei Bedarf automatisch ergänzt.</small>
+            <select name="existing_id">
+                {% for rule in rules %}
+                <option value="{{ rule.id }}"
+                        {% if selected_existing == rule.id %}selected{% endif %}>
+                    {{ rule.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </span>
+    </label>
+    {% endif %}
+
+    <label class="launchpad-choice">
+        <input type="radio" name="mode" value="new"
+               {% if selected_mode == 'new' %}checked{% endif %}>
+        <span>
+            <strong>Eigene Rule erstellen</strong>
+            <small>Status, Ziele, Verzögerungen und Wiederholungen selbst festlegen.</small>
+        </span>
+    </label>
+
+    <label class="launchpad-choice">
+        <input type="radio" name="mode" value="none"
+               {% if selected_mode == 'none' %}checked{% endif %}>
+        <span>
+            <strong>Keine Rule</strong>
+            <small>Der Guardian wird überwacht, sendet aber zunächst keine Meldungen.</small>
+        </span>
+    </label>
+
+    <div class="form-actions">
+        <a class="button" href="{{ back_url }}">Zurück</a>
+        <button class="button primary" type="submit">Weiter zur Zusammenfassung</button>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Beacons · {{ app_name }}{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="{{ url_for('beacons_page') }}">Beacons</a></nav>
+
+<section class="dashboard-heading">
+    <div>
+        <h1>{{ t('beacons.title') }}</h1>
+        <p>{{ t('beacons.subtitle') }}</p>
+    </div>
+    <div class="heading-actions">
+        <a class="button" href="{{ url_for('beacon_management') }}">{{ t('beacons.types') }}</a>
+        <div class="add-beacon-dropdown card-menu">
+            <button class="button primary kebab-trigger" type="button" aria-expanded="false">
+                {{ t('beacons.add') }}
+            </button>
+            <div class="card-menu-panel beacon-type-menu" hidden>
+                {% for beacon in beacon_types if beacon.status == 'loaded' %}
+                    <a href="{{ url_for('notification_channel_add', channel_type=beacon.module) }}">
+                        {{ beacon.name }}
+                        {% if beacon.source == 'custom' %}<small>Custom</small>{% endif %}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if missing_rule_warning %}
+<div class="configuration-warning">
+    <strong>Keine Rule vorhanden.</strong>
+    Die Beacons können getestet werden, versenden aber ohne Rule keine Guardian-Ereignisse.
+    <a href="{{ url_for('notification_rule_form') }}">Rule erstellen</a>
+</div>
+{% endif %}
+
+<section class="summary-grid beacon-summary">
+    <article class="summary-card">
+        <span class="summary-icon shield">◉</span>
+        <div><strong>{{ channels|length }}</strong><span>Beacons</span></div>
+    </article>
+    <article class="summary-card">
+        <span class="summary-icon ok"><svg><use href="#icon-check"/></svg></span>
+        <div><strong>{{ channels|selectattr('enabled')|list|length }}</strong><span>Aktiv</span></div>
+    </article>
+    <article class="summary-card">
+        <span class="summary-icon warning"><svg><use href="#icon-warning"/></svg></span>
+        <div><strong>{{ status.values()|selectattr('last_error')|list|length }}</strong><span>Mit Fehler</span></div>
+    </article>
+</section>
+
+<div class="guardian-grid beacon-grid">
+{% for channel in channels %}
+    {% set channel_status = status.get(channel.id, {}) %}
+    {% set beacon_meta = (beacon_types|selectattr('module', 'equalto', channel.type)|list|first) %}
+    {% set muted = muted_beacons.get(channel.id) %}
+    {% set state = 'muted' if muted else ('error' if channel_status.get('last_error') else ('active' if channel.get('enabled', true) else 'disabled')) %}
+    <article class="guardian-card beacon-card status-{{ state }}">
+        <div class="guardian-top">
+            <span class="device-icon beacon-device-icon">
+                {{ {'mqtt':'MQ','webhook':'WH','get_webhook':'GET','email':'EM','discord':'DC','telegram':'TG'}.get(channel.type, 'BC') }}
+            </span>
+            <div class="guardian-title">
+                <h2><a href="{{ url_for('notification_channel_edit', channel_id=channel.id) }}">{{ channel.name }}</a></h2>
+                <p>{{ beacon_meta.name if beacon_meta else channel.type }}</p>
+            </div>
+            <span class="status-badge">{{ state }}</span>
+            <div class="card-menu">
+                <button class="kebab" type="button" aria-expanded="false">⋮</button>
+                <div class="card-menu-panel" hidden>
+                    <a href="{{ url_for('notification_channel_edit', channel_id=channel.id) }}">{{ t('common.edit') }}</a>
+                    <form method="post" action="{{ url_for('notification_channel_test', channel_id=channel.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">Testnachricht senden</button>
+                    </form>
+                    <form method="post" action="{{ url_for('notification_channel_duplicate', channel_id=channel.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">{{ t('common.duplicate') }}</button>
+                    </form>
+                    <a href="{{ url_for('beacon_deliveries', channel_id=channel.id) }}">Versandhistorie</a>
+                    {% if muted %}
+                    <form method="post" action="{{ url_for('notification_channel_unmute', channel_id=channel.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">Stummschaltung aufheben</button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="{{ url_for('notification_channel_mute', channel_id=channel.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="duration_minutes" value="60">
+                        <button type="submit">Für 60 Minuten stummschalten</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('notification_channel_toggle', channel_id=channel.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit">{{ 'Deaktivieren' if channel.get('enabled', true) else 'Aktivieren' }}</button>
+                    </form>
+                    <form method="post"
+                          action="{{ url_for('notification_channel_delete', channel_id=channel.id) }}"
+                          onsubmit="return confirm('Beacon wirklich löschen?')">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button class="menu-danger" type="submit">{{ t('common.delete') }}</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <p class="guardian-message">
+            {% if channel.type == 'mqtt' %}
+                {{ channel.host }}:{{ channel.get('port', 1883) }} · {{ channel.get('topic', 'lanaxy/notifications') }}
+            {% elif channel.type == 'webhook' %}
+                {{ channel.get('method', 'POST') }} · {{ channel.url }}
+            {% elif channel.type == 'get_webhook' %}
+                GET · {{ channel.url }}
+            {% elif channel.type == 'email' %}
+                {{ channel.smtp_host }} · {{ channel.recipients }}
+            {% elif channel.type == 'discord' %}
+                Discord Webhook · {{ channel.get('username', 'LANaxy') }}
+            {% elif channel.type == 'telegram' %}
+                Telegram Chat {{ channel.chat_id }}
+            {% else %}
+                {{ beacon_meta.description if beacon_meta else 'Custom Beacon' }}
+            {% endif %}
+        </p>
+
+        <div class="guardian-stats">
+            <div><svg><use href="#icon-calendar"/></svg><span>Letzter erfolgreicher Versand</span><strong data-lanaxy-datetime="{{ channel_status.get('last_success','') }}">{{ channel_status.get('last_success', '—') }}</strong></div>
+            <div><svg><use href="#icon-warning"/></svg><span>Letzter Fehler</span><strong>{{ channel_status.get('last_error', 'Keiner') }}</strong></div>
+            <div><svg><use href="#icon-settings"/></svg><span>Rules</span><strong>{{ rule_usage.get(channel.id, 0) }}</strong></div>
+        </div>
+
+        {% if muted %}
+        <div class="rule-flags"><span>Stumm bis <span data-lanaxy-datetime="{{ muted.get('until','') }}">{{ muted.get('until','manuell') }}</span></span></div>
+        {% endif %}
+        <div class="guardian-actions">
+            <a class="button" href="{{ url_for('beacon_deliveries', channel_id=channel.id) }}">Versandhistorie</a>
+            <form method="post" action="{{ url_for('notification_channel_test', channel_id=channel.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="button action-primary" type="submit">{{ t('common.test') }}</button>
+            </form>
+        </div>
+    </article>
+{% else %}
+    <div class="empty">
+        <h2>Noch keine Beacons</h2>
+        <p>Lege ein Benachrichtigungsziel an.</p>
+    </div>
+{% endfor %}
+</div>
+
+<script src="{{ url_for('static', filename='card-menu.js') }}"></script>
+{% endblock %}

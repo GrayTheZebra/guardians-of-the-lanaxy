@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "guardians": "Guardians",
+    "beacons": "Beacons",
+    "rules": "Rules",
+    "history": "Historie",
+    "protocol": "Protokoll",
+    "system": "System",
+    "about": "Über",
+    "portals": "Portals"
+  },
+  "common": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "duplicate": "Duplizieren",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren",
+    "test": "Testen",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "success": "Erfolgreich",
+    "error": "Fehler",
+    "loading": "Wird ausgeführt …",
+    "yes": "Ja",
+    "no": "Nein"
+  },
+  "beacons": {
+    "title": "Beacons",
+    "subtitle": "Benachrichtigungsziele für Guardian-Ereignisse",
+    "add": "Beacon hinzufügen",
+    "types": "Beacon-Typen",
+    "form_add": "{name}-Beacon hinzufügen",
+    "form_edit": "{name}-Beacon bearbeiten",
+    "enabled": "Beacon aktiv",
+    "test_before_save": "Testen ohne Speichern",
+    "test_success": "Testnachricht erfolgreich versendet.",
+    "test_failed": "Test fehlgeschlagen: {error}",
+    "test_duration": "Versanddauer: {duration} ms",
+    "validation_failed": "Bitte prüfe die Pflichtfelder.",
+    "chats_search": "Chats suchen",
+    "chat_search_running": "Suche läuft …"
+  },
+  "rules": {
+    "title": "Rules",
+    "subtitle": "Rules legen fest, welche Guardian-Ereignisse an welche Beacons gesendet werden.",
+    "add": "Rule hinzufügen"
+  },
+  "system": {
+    "title": "System",
+    "subtitle": "LANaxy-Status und Zugriffsschutz",
+    "language": "Sprache",
+    "language_auto": "Automatisch (Browser)",
+    "language_saved": "Sprache wurde gespeichert.",
+    "access": "Zugriffsschutz",
+    "enabled": "Aktiviert",
+    "username": "Benutzername",
+    "new_password": "Neues Passwort",
+    "confirm_password": "Passwort bestätigen",
+    "session_duration": "Session-Dauer (Minuten)",
+    "system_info": "Systeminformationen",
+    "system_mqtt": "System-MQTT",
+    "configure": "Konfigurieren"
+  },
+  "toast": {
+    "close": "Schließen"
+  },
+  "status": {
+    "active": "aktiv",
+    "disabled": "inaktiv",
+    "error": "Fehler",
+    "unknown": "unbekannt",
+    "maintenance": "Wartung",
+    "warning": "Warnung",
+    "critical": "kritisch",
+    "recovery": "wiederhergestellt",
+    "ok": "OK"
+  },
+  "footer": "Dein Netzwerk. Bewacht."
+}

@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Abhängigkeiten · {{ app_name }}{% endblock %}
+{% macro render_nodes(nodes) %}
+<ul class="dependency-tree-list">
+{% for node in nodes %}
+<li class="dependency-tree-item" data-id="{{ node.check.id }}" draggable="true">
+  <div class="dependency-tree-card status-{{ node.state.get('status','unknown') }}">
+    <button type="button" class="tree-drag-handle" title="Ziehen zum Verschieben" aria-label="Guardian verschieben">⋮⋮</button>
+    <button type="button" class="tree-toggle" aria-label="Untergeordnete Guardians ein- oder ausklappen" {% if not node.children %}disabled{% endif %}>{{ '▾' if node.children else '·' }}</button>
+    <div class="tree-node-main">
+      <strong>{{ node.check.name }}</strong>
+      <small>{{ node.check.id }}{% if node.check.get('group') %} · {{ node.check.group }}{% endif %}</small>
+      {% if node.extra_dependencies %}<span class="tree-extra-deps">Weitere Abhängigkeiten: {{ node.extra_dependencies|join(', ') }}</span>{% endif %}
+      {% if node.scheduled_maintenance %}<span class="tree-maintenance">Wartung bis {{ node.scheduled_maintenance.until|replace('T',' ') }}</span>{% endif %}
+    </div>
+    <span class="tree-status">{{ node.state.get('status','unknown')|upper }}</span>
+    <a class="tree-edit" href="{{ url_for('guardian_detail', check_id=node.check.id) }}">Öffnen</a>
+  </div>
+  <div class="tree-drop-inside">Hier ablegen, um unterzuordnen</div>
+  {{ render_nodes(node.children) if node.children }}
+</li>
+{% endfor %}
+</ul>
+{% endmacro %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Systemmodell</p><h1>Abhängigkeiten anordnen</h1><p>Ziehe Guardians wie in einem Menübaum an die gewünschte Stelle. Ein eingerückter Guardian hängt vom direkt übergeordneten Guardian ab.</p></div></div>
+{% if diagnostics.cycles or diagnostics.orphans %}
+<section class="topology-alert critical"><strong>Topologie prüfen</strong>
+{% for cycle in diagnostics.cycles %}<p>Zirkuläre Abhängigkeit: {{ cycle|join(' → ') }}</p>{% endfor %}
+{% for orphan in diagnostics.orphans %}<p>{{ orphan.guardian_id }} verweist auf den fehlenden Guardian {{ orphan.dependency_id }}.</p>{% endfor %}
+</section>
+{% else %}<section class="topology-alert ok"><strong>Topologie ist konsistent.</strong><span>Keine Zyklen oder fehlenden Abhängigkeiten erkannt.</span></section>{% endif %}
+<section class="chart-card dependency-tree-editor">
+  <div class="card-heading"><div><h2>Guardian-Baum</h2><p>Auf eine Karte ziehen: als Unterpunkt einordnen. Zwischen zwei Karten ziehen: Reihenfolge ändern. Ganz oben ablegen: Abhängigkeit aufheben.</p></div><div class="form-actions"><button class="button" id="expand-tree" type="button">Alle aufklappen</button><button class="button primary" id="save-tree" type="button">Anordnung speichern</button></div></div>
+  <div id="tree-message" class="tree-message" hidden></div>
+  <div id="dependency-tree" class="dependency-tree-root">
+    <div class="tree-root-drop">Hier ablegen, um als oberste Ebene einzuordnen</div>
+    {% if roots %}{{ render_nodes(roots) }}{% else %}<p class="empty-state">Noch keine Guardians vorhanden.</p>{% endif %}
+  </div>
+  <p class="field-hint">Die Baumansicht verwaltet die primäre Abhängigkeit. Zusätzliche Abhängigkeiten bleiben erhalten und werden an der Karte angezeigt; sie können weiterhin im Guardian-Formular bearbeitet werden.</p>
+</section>
+<script>
+(() => {
+  const root = document.getElementById('dependency-tree');
+  const saveButton = document.getElementById('save-tree');
+  const message = document.getElementById('tree-message');
+  let dragged = null;
+
+  function directList(container) {
+    return Array.from(container.children).find((child) => child.classList && child.classList.contains('dependency-tree-list'));
+  }
+  function ensureList(container) {
+    let list = directList(container);
+    if (!list) {
+      list = document.createElement('ul');
+      list.className = 'dependency-tree-list';
+      container.appendChild(list);
+    }
+    return list;
+  }
+  function isDescendant(target, possibleParent) {
+    return possibleParent && possibleParent.contains(target);
+  }
+  function clearDropState() {
+    root.querySelectorAll('.drop-before,.drop-after,.drop-inside').forEach((el) => el.classList.remove('drop-before','drop-after','drop-inside'));
+  }
+  function markChanged() {
+    saveButton.classList.add('is-dirty');
+    message.hidden = true;
+  }
+
+  root.addEventListener('dragstart', (event) => {
+    const item = event.target.closest('.dependency-tree-item');
+    if (!item) return;
+    dragged = item;
+    item.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', item.dataset.id);
+  });
+  root.addEventListener('dragend', () => {
+    if (dragged) dragged.classList.remove('is-dragging');
+    dragged = null;
+    clearDropState();
+  });
+  root.addEventListener('dragover', (event) => {
+    if (!dragged) return;
+    const item = event.target.closest('.dependency-tree-item');
+    const rootDrop = event.target.closest('.tree-root-drop');
+    if (rootDrop) {
+      event.preventDefault(); clearDropState(); rootDrop.classList.add('drop-inside'); return;
+    }
+    if (!item || item === dragged || isDescendant(item, dragged)) return;
+    event.preventDefault(); clearDropState();
+    const card = item.querySelector(':scope > .dependency-tree-card');
+    const rect = card.getBoundingClientRect();
+    const relative = (event.clientY - rect.top) / rect.height;
+    if (relative < .25) item.classList.add('drop-before');
+    else if (relative > .75) item.classList.add('drop-after');
+    else item.classList.add('drop-inside');
+  });
+  root.addEventListener('drop', (event) => {
+    if (!dragged) return;
+    event.preventDefault();
+    const rootDrop = event.target.closest('.tree-root-drop');
+    if (rootDrop) {
+      ensureList(root).appendChild(dragged); clearDropState(); markChanged(); return;
+    }
+    const target = event.target.closest('.dependency-tree-item');
+    if (!target || target === dragged || isDescendant(target, dragged)) return;
+    if (target.classList.contains('drop-before')) target.parentNode.insertBefore(dragged, target);
+    else if (target.classList.contains('drop-after')) target.parentNode.insertBefore(dragged, target.nextSibling);
+    else ensureList(target).appendChild(dragged);
+    clearDropState(); markChanged();
+  });
+  root.addEventListener('click', (event) => {
+    const toggle = event.target.closest('.tree-toggle');
+    if (!toggle || toggle.disabled) return;
+    const item = toggle.closest('.dependency-tree-item');
+    item.classList.toggle('is-collapsed');
+    toggle.textContent = item.classList.contains('is-collapsed') ? '▸' : '▾';
+  });
+  document.getElementById('expand-tree').addEventListener('click', () => {
+    root.querySelectorAll('.dependency-tree-item').forEach((item) => item.classList.remove('is-collapsed'));
+    root.querySelectorAll('.tree-toggle:not(:disabled)').forEach((button) => button.textContent = '▾');
+  });
+  saveButton.addEventListener('click', async () => {
+    const items = [];
+    function collect(list, parent) {
+      Array.from(list.children).filter((child) => child.classList.contains('dependency-tree-item')).forEach((item, order) => {
+        items.push({id: item.dataset.id, parent, order});
+        const childList = directList(item);
+        if (childList) collect(childList, item.dataset.id);
+      });
+    }
+    const topList = directList(root);
+    if (topList) collect(topList, '');
+    saveButton.disabled = true;
+    try {
+      const response = await fetch('{{ url_for("topology_save") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({items})
+      });
+      const contentType = response.headers.get('content-type') || '';
+      let data = {};
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const body = await response.text();
+        throw new Error(response.status === 400
+          ? 'Die Anfrage wurde abgelehnt. Bitte die Seite neu laden und erneut versuchen.'
+          : `Speichern fehlgeschlagen (HTTP ${response.status}).`);
+      }
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Speichern fehlgeschlagen.');
+      message.className = 'tree-message success'; message.textContent = data.message; message.hidden = false;
+      saveButton.classList.remove('is-dirty');
+    } catch (error) {
+      message.className = 'tree-message error'; message.textContent = error.message; message.hidden = false;
+    } finally { saveButton.disabled = false; }
+  });
+})();
+</script>
+{% endblock %}

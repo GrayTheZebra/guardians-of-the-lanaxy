@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_launchpad_progress.html" import launchpad_progress %}
+{% block title %}Launchpad · {{ app_name }}{% endblock %}
+{% block content %}
+{{ launchpad_progress(step_number) }}
+
+<section class="launchpad-heading">
+    <div>
+        <p class="eyebrow">Launchpad</p>
+        <h1>{{ title }}</h1>
+        <p>{{ subtitle }}</p>
+    </div>
+</section>
+
+<section class="launchpad-explanation">
+    <span class="launchpad-explanation-icon">?</span>
+    <div>
+        <h2>Was ist ein Beacon?</h2>
+        <p>
+            Beacons sind die Ausgänge von LANaxy: Sie senden Warnungen und
+            Entwarnungen zum Beispiel per Telegram, E-Mail, MQTT oder Webhook.
+            Du kannst einen vorhandenen Beacon wiederverwenden, einen neuen
+            einrichten oder Benachrichtigungen zunächst überspringen.
+        </p>
+    </div>
+</section>
+
+<form method="post" class="config-form launchpad-choice-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label class="launchpad-choice">
+        <input type="radio" name="mode" value="none"
+               {% if selected_mode == 'none' %}checked{% endif %}>
+        <span>
+            <strong>Überspringen</strong>
+            <small>Diese Komponente jetzt nicht einrichten.</small>
+        </span>
+    </label>
+
+    {% if existing %}
+    <label class="launchpad-choice">
+        <input type="radio" name="mode" value="existing"
+               {% if selected_mode == 'existing' %}checked{% endif %}>
+        <span>
+            <strong>Vorhandene Instanz verwenden</strong>
+            <small>Bereits konfigurierte Komponente auswählen.</small>
+            <select name="existing_id">
+                {% for item in existing %}
+                <option value="{{ item.id }}"
+                        {% if selected_existing == item.id %}selected{% endif %}>
+                    {{ item.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </span>
+    </label>
+    {% endif %}
+
+    <label class="launchpad-choice">
+        <input type="radio" name="mode" value="new"
+               {% if selected_mode == 'new' %}checked{% endif %}>
+        <span>
+            <strong>Neue Instanz erstellen</strong>
+            <small>Typ auswählen und im nächsten Schritt konfigurieren.</small>
+            <select name="type">
+                {% for item in types %}
+                <option value="{{ item.module }}"
+                        {% if selected_type == item.module %}selected{% endif %}>
+                    {{ item.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </span>
+    </label>
+
+    <div class="form-actions">
+        <a class="button" href="{{ back_url }}">Zurück</a>
+        <button class="button primary" type="submit">{{ next_label }}</button>
+    </div>
+</form>
+{% endblock %}
