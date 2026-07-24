@@ -1011,6 +1011,16 @@ guardians-of-the-lanaxy/
 
 Fehlerberichte sollten die LANaxy-Version, den betroffenen Bereich, die ausgeführte Aktion und einen bereinigten Diagnoseauszug enthalten. Zugangsdaten, Portal-Secrets und MiniGuard-Tokens dürfen nicht veröffentlicht werden.
 
+## Projekt unterstützen
+
+LANaxy ist freie Software und bleibt kostenlos verfügbar.
+
+- [LANaxy über PayPal unterstützen](https://www.paypal.com/paypalme/ProStoff)
+- [Über meinen Amazon-Partnerlink einkaufen](https://amzn.to/3Y3GQx4)
+
+<sub>
+Der Amazon-Link ist ein Affiliate-Link. Bei qualifizierten Käufen erhalte ich eine Provision. Für dich ändert sich der Preis nicht. Als Amazon-Partner verdiene ich an qualifizierten Verkäufen.
+</sub>
 
 ## Lizenz
 
