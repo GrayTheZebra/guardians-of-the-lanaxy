@@ -6,15 +6,14 @@ from werkzeug.security import check_password_hash
 ATTEMPTS=defaultdict(deque)
 PUBLIC_TOKEN_ENDPOINTS={
     "miniguard_install_bootstrap",
-    "miniguard_update_bootstrap",
 }
 def auth_config(config): return config.get("web",{}).get("authentication",{})
 def enabled(config):
     a=auth_config(config)
     return bool(a.get("enabled") and a.get("username") and a.get("password_hash"))
 def valid(config):
-    # MiniGuard bootstrap URLs are protected by their registration token and
-    # must remain accessible before the target system has a LANaxy session.
+    # The MiniGuard installation bootstrap is protected by its one-time
+    # registration code and must be reachable before the target has a session.
     if request.endpoint in PUBLIC_TOKEN_ENDPOINTS:
         return True
     if not enabled(config): return True
