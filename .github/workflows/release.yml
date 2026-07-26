@@ -1,6 +1,7 @@
 name: LANaxy Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
@@ -51,18 +52,18 @@ jobs:
           lanaxy = config.setdefault("lanaxy", {})
 
           lanaxy["database_file"] = str(
-              Path(os.environ["LANAXY_DATA_DIR"]) / "lanaxy.db"
+            Path(os.environ["LANAXY_DATA_DIR"]) / "lanaxy.db"
           )
           lanaxy["state_file"] = str(
-              Path(os.environ["LANAXY_DATA_DIR"]) / "state.json"
+            Path(os.environ["LANAXY_DATA_DIR"]) / "state.json"
           )
           lanaxy["log_file"] = str(
-              Path(os.environ["LANAXY_LOG_DIR"]) / "lanaxy.log"
+            Path(os.environ["LANAXY_LOG_DIR"]) / "lanaxy.log"
           )
 
           config_path.write_text(
-              yaml.safe_dump(config, sort_keys=False),
-              encoding="utf-8",
+            yaml.safe_dump(config, sort_keys=False),
+            encoding="utf-8",
           )
           PY
 
@@ -90,7 +91,9 @@ jobs:
             web.run:app
 
           VERSION="$(python3 -B -c 'from lanaxy import APP_VERSION; print(APP_VERSION)')"
-          test "v${VERSION}" = "$GITHUB_REF_NAME"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            test "v${VERSION}" = "$GITHUB_REF_NAME"
+          fi
 
       - name: Release-Archiv erstellen
         run: |
@@ -143,22 +146,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES="RELEASE_NOTES_${GITHUB_REF_NAME#v}.md"
+          VERSION="$(python3 -B -c 'from lanaxy import APP_VERSION; print(APP_VERSION)')"
+          TAG="v${VERSION}"
+          NOTES="RELEASE_NOTES_${VERSION}.md"
+          TITLE="Guardians of the LANaxy ${VERSION}"
 
-          if [ -f "$NOTES" ]; then
-            gh release create "$GITHUB_REF_NAME" \
-              dist/guardians-of-the-lanaxy.zip \
-              dist/guardians-of-the-lanaxy.zip.sha256 \
-              dist/install.sh \
-              dist/install.sh.sha256 \
-              --title "Guardians of the LANaxy ${GITHUB_REF_NAME#v}" \
+          ASSETS=(
+            dist/guardians-of-the-lanaxy.zip
+            dist/guardians-of-the-lanaxy.zip.sha256
+            dist/install.sh
+            dist/install.sh.sha256
+          )
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ -f "$NOTES" ]; then
+              gh release edit "$TAG" \
+                --title "$TITLE" \
+                --notes-file "$NOTES"
+            else
+              gh release edit "$TAG" --title "$TITLE"
+            fi
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          elif [ -f "$NOTES" ]; then
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "$TITLE" \
               --notes-file "$NOTES"
           else
-            gh release create "$GITHUB_REF_NAME" \
-              dist/guardians-of-the-lanaxy.zip \
-              dist/guardians-of-the-lanaxy.zip.sha256 \
-              dist/install.sh \
-              dist/install.sh.sha256 \
-              --title "Guardians of the LANaxy ${GITHUB_REF_NAME#v}" \
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "$TITLE" \
               --generate-notes
           fi
