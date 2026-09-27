@@ -116,7 +116,9 @@ chmod 0750 \
     "$PROJECT_DIR/web/run.py" \
     "$PROJECT_DIR/install.sh" \
     "$PROJECT_DIR/update.sh" \
-    "$PROJECT_DIR/scripts/setup-lanlord.sh"
+    "$PROJECT_DIR/uninstall.sh" \
+    "$PROJECT_DIR/scripts/setup-lanlord.sh" \
+    "$PROJECT_DIR/scripts/deploy-public-installer.sh"
 
 # LANaxy's web UI must be able to atomically replace config files and manage
 # custom plugins/backups, so these dedicated directories belong to LANLord.
