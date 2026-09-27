@@ -230,6 +230,20 @@ def list_agents(path: Path = DEFAULT_PATH) -> list[dict[str, Any]]:
         now = _now()
         for agent in _read(path)['agents']:
             item = {k: v for k, v in agent.items() if not k.endswith('_hash')}
+
+            # Backward-compatible defaults for agents created by older LANaxy
+            # versions. Optional fields must never break the MiniGuard UI.
+            item.setdefault('auto_update', False)
+            item.setdefault('inventory_aliases', {})
+            item.setdefault('inventory_changes', [])
+            item.setdefault('hardware_inventory', {})
+            item.setdefault('hardware_inventory_normalized', {})
+            item.setdefault('action_permissions', dict(DEFAULT_ACTION_PERMISSIONS))
+            item.setdefault('reported_action_permissions', {})
+            item.setdefault('tools', {})
+            item.setdefault('capabilities', [])
+            item.setdefault('health', {})
+
             last_seen = item.get('last_seen')
             online = False
             if last_seen:
@@ -273,6 +287,7 @@ def create_agent(name: str, description: str = '', ttl_minutes: int = 30,
         'protocol_version': None,
         'capabilities': [],
         'action_permissions': dict(DEFAULT_ACTION_PERMISSIONS),
+        'auto_update': False,
         'last_seen': None,
     }
     with _lock_for(path):
@@ -574,6 +589,23 @@ def set_agent_enabled(agent_id: str, enabled: bool, path: Path = DEFAULT_PATH) -
             return False
         agent['enabled'] = bool(enabled)
         agent['enabled_updated_at'] = _iso()
+        _write(path, data)
+        return True
+
+
+
+def set_agent_auto_update(agent_id: str, enabled: bool,
+                          path: Path = DEFAULT_PATH) -> bool:
+    with _lock_for(path):
+        data = _read(path)
+        agent = next(
+            (item for item in data.get('agents', []) if item.get('id') == agent_id),
+            None,
+        )
+        if agent is None:
+            return False
+        agent['auto_update'] = bool(enabled)
+        agent['auto_update_updated_at'] = _iso()
         _write(path, data)
         return True
 

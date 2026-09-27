@@ -94,6 +94,7 @@ from miniguard_manager import (
     register_agent as register_miniguard,
     set_action_permissions as set_miniguard_action_permissions,
     set_agent_enabled as set_miniguard_enabled,
+    set_agent_auto_update as set_miniguard_auto_update,
     set_inventory_alias as set_miniguard_inventory_alias,
     acknowledge_inventory_changes as acknowledge_miniguard_inventory_changes,
     wait_for_task as wait_for_miniguard_task,
@@ -6121,13 +6122,26 @@ def create_app() -> Flask:
         restart_lanaxy()
         return len(removed_ids)
 
+    def _bundled_miniguard_version():
+        agent_path = Path(__file__).resolve().parents[1] / "miniguard_agent.py"
+        try:
+            source = agent_path.read_text(encoding="utf-8")
+            match = re.search(r"\bVERSION\s*=\s*['\"]([^'\"]+)['\"]", source)
+            return match.group(1) if match else ""
+        except OSError:
+            return ""
+
+    def _version_tuple(value):
+        parts = [int(part) for part in re.findall(r"\d+", str(value or ""))[:3]]
+        return tuple(parts + [0] * (3 - len(parts)))
+
     def _miniguard_update_parameters(agent_id):
         agent_path = Path(__file__).resolve().parents[1] / "miniguard_agent.py"
         payload = agent_path.read_bytes()
         return {
             "url": request.url_root.rstrip("/") + "/miniguard/agent.py",
             "sha256": hashlib.sha256(payload).hexdigest(),
-            "target_version": "1.7.0",
+            "target_version": _bundled_miniguard_version(),
         }
 
     def _run_miniguard_action(agent_id, action_type, parameters=None, timeout=90):
@@ -6246,6 +6260,9 @@ def create_app() -> Flask:
             compatibility = evaluate_miniguard_compatibility(agent, APP_VERSION)
             agent["compatibility"] = compatibility
             agent["latest_agent_version"] = latest_agent_version
+            agent["bundled_agent_version"] = _bundled_miniguard_version()
+            agent["auto_update"] = bool(agent.get("auto_update", False))
+            agent["newer_agent_available"] = _version_tuple(agent.get("agent_version")) < _version_tuple(agent["bundled_agent_version"])
             agent["update_available"] = compatibility.get("update_required", False)
             installed_version = tuple(int(part) for part in re.findall(r"\d+", str(agent.get("agent_version") or "0.0.0"))[:3])
             installed_version = installed_version + (0,) * (3 - len(installed_version))
@@ -6423,6 +6440,18 @@ def create_app() -> Flask:
             flash(f"Berechtigungen konnten nicht gespeichert werden: {error}", "error")
         return redirect(url_for("miniguards_page"))
 
+    @app.post("/system/miniguards/<agent_id>/auto-update")
+    def miniguard_auto_update(agent_id):
+        enabled = request.form.get("enabled") == "1"
+        if set_miniguard_auto_update(agent_id, enabled):
+            flash(
+                f"Automatische Agent-Updates wurden {'aktiviert' if enabled else 'deaktiviert'}.",
+                "success",
+            )
+        else:
+            flash("MiniGuard wurde nicht gefunden.", "error")
+        return redirect(url_for("miniguards_page"))
+
     @app.post("/system/miniguards/<agent_id>/toggle")
     def miniguard_toggle(agent_id):
         enabled = request.form.get("enabled") == "1"
@@ -6514,7 +6543,45 @@ def create_app() -> Flask:
         auth = request.headers.get("Authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
         try:
-            return miniguard_heartbeat(agent_id, token, request.get_json(silent=True) or {})
+            result = miniguard_heartbeat(
+                agent_id,
+                token,
+                request.get_json(silent=True) or {},
+            )
+
+            agent = get_miniguard(agent_id) or {}
+            bundled = _bundled_miniguard_version()
+            installed = _version_tuple(agent.get("agent_version"))
+            target = _version_tuple(bundled)
+            permissions = {
+                **MINIGUARD_DEFAULT_ACTION_PERMISSIONS,
+                **(agent.get("action_permissions") or {}),
+            }
+
+            if (
+                agent.get("auto_update")
+                and bundled
+                and installed >= (1, 7, 0)
+                and installed < target
+                and permissions.get("update_agent", False)
+            ):
+                update_pending = any(
+                    task.get("action_type") == "update_agent"
+                    and task.get("status") in {"pending", "running"}
+                    for task in miniguard_recent_tasks(agent_id, 20)
+                )
+                if not update_pending:
+                    enqueue_miniguard_action(
+                        agent_id,
+                        "update_agent",
+                        _miniguard_update_parameters(agent_id),
+                        timeout=180,
+                        actor="LANaxy Auto-Update",
+                    )
+                    result["auto_update_enqueued"] = True
+                    result["auto_update_target"] = bundled
+
+            return result
         except PermissionError as error:
             return {"ok": False, "error": str(error)}, 403
 

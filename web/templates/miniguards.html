@@ -137,13 +137,37 @@ async function copyMiniGuardCommand(elementId) {
         <div><small>Remote-Worker</small><strong>{{ 'Aktiv' if agent.worker_ready else 'Nicht aktiv' }}</strong></div>
         <div><small>Fähigkeiten</small><strong>{{ agent.capabilities|length if agent.capabilities else 0 }}</strong></div>
       </div>
+      <div class="miniguard-summary-line">
+        <span><strong>{{ agent.hostname or '—' }}</strong></span>
+        <span>Agent {{ agent.agent_version or '—' }}</span>
+        <span>Remote Worker {{ 'aktiv' if agent.worker_ready else 'nicht aktiv' }}</span>
+        <span>{{ agent.capabilities|length if agent.capabilities else 0 }} Fähigkeiten</span>
+      </div>
       {% if agent.capabilities %}<div class="miniguard-capabilities" title="{{ agent.capabilities|join(', ') }}">{{ agent.capabilities|join(' · ') }}</div>{% endif %}
+      <div class="miniguard-quick-actions">
+        {% if agent.registered and agent.remote_management_ready %}
+        <form class="miniguard-ajax-action miniguard-update-now" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="update_agent">
+          <button class="button {{ 'primary' if agent.newer_agent_available else '' }}" type="submit">Agent aktualisieren</button>
+        </form>
+        <form class="miniguard-auto-update-form" method="post" action="{{ url_for('miniguard_auto_update', agent_id=agent.id) }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="enabled" value="{{ '0' if agent.auto_update else '1' }}">
+          <button class="miniguard-auto-update-toggle {{ 'is-enabled' if agent.auto_update else '' }}" type="submit"
+                  title="Wenn aktiv, aktualisiert LANaxy diesen MiniGuard automatisch, sobald die mit LANaxy ausgelieferte Agent-Version neuer ist.">
+            <span class="status-dot {{ 'ok' if agent.auto_update else 'unknown' }}"></span>
+            Auto-Update {{ 'an' if agent.auto_update else 'aus' }}
+          </button>
+        </form>
+        {% endif %}
+      </div>
       {% if agent.registered %}
       <div class="miniguard-compatibility miniguard-compatibility--{{ agent.compatibility.status }}">
         <svg><use href="#icon-{{ 'check' if agent.compatibility.compatible else 'warning' }}"/></svg>
         <div>
           <strong>
-            {% if agent.compatibility.compatible %}Agent passt zu LANaxy {{ app_version }}
+            {% if agent.compatibility.compatible %}Kompatibel mit LANaxy {{ app_version }}
             {% else %}MiniGuard aktualisieren{% endif %}
           </strong>
           <p>{{ agent.compatibility.reason }}</p>
@@ -157,12 +181,11 @@ async function copyMiniGuardCommand(elementId) {
       {% endif %}
       <div class="miniguard-management-grid {{ '' if agent.remote_management_ready else 'miniguard-management-grid--locked' }}">
         <details class="miniguard-actions {{ 'locked' if not agent.remote_management_ready else '' }}">
-          <summary>Steuern und verwalten</summary>
+          <summary>Weitere Aktionen</summary>
           <fieldset class="miniguard-details-body miniguard-action-buttons" {% if not agent.remote_management_ready %}disabled{% endif %}>
             <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="run_diagnostics"><button class="button" type="submit">Diagnose ausführen</button></form>
             <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="refresh_inventory"><button class="button" type="submit">Inventar aktualisieren</button></form>
             <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="fetch_logs"><input type="hidden" name="lines" value="250"><button class="button" type="submit">Agent-Protokoll abrufen</button></form>
-            <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_agent"><button class="button primary" type="submit">Agent direkt aktualisieren</button></form>
             <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}" data-confirm="MiniGuard wirklich neu starten?"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="restart_agent"><button class="button" type="submit">Agent neu starten</button></form>
             <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}" data-confirm="Agent-Token wirklich rotieren? Alte Zugangsdaten werden sofort ungültig."><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="rotate_token"><button class="button" type="submit">Token rotieren</button></form>
             <form class="miniguard-ajax-action" method="post" action="{{ url_for('miniguard_action', agent_id=agent.id) }}" data-confirm="Letzte MiniGuard-Sicherung wiederherstellen?"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="rollback_agent"><button class="button warning" type="submit">Agent-Rollback</button></form>
@@ -182,7 +205,7 @@ async function copyMiniGuardCommand(elementId) {
           </form>
         </details>
         <details class="miniguard-audit">
-          <summary>Aufträge und Audit</summary>
+          <summary>Audit & Aufträge</summary>
           <div class="miniguard-details-body">
             {% if agent.recent_tasks %}
             <div class="miniguard-task-list">
@@ -208,14 +231,14 @@ async function copyMiniGuardCommand(elementId) {
           </form>{% endif %}
           {% for kind, rows in agent.hardware_inventory_normalized.items() if rows %}
           <h4>{{ kind }}</h4><div class="inventory-alias-grid">
-          {% for item in rows %}<form method="post" action="{{ url_for('miniguard_inventory_alias',agent_id=agent.id) }}" class="inventory-alias-row"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="inventory_id" value="{{ item.inventory_id }}"><div><strong>{{ item.effective_name }}</strong><small>{{ item.inventory_id }}{% if item.serial_path %} · {{ item.serial_path }}{% endif %}</small></div><input name="alias" value="{{ agent.inventory_aliases.get(item.inventory_id,'') }}" placeholder="Eigener Gerätename"><button class="button">Speichern</button></form>{% endfor %}
+          {% for item in rows %}<form method="post" action="{{ url_for('miniguard_inventory_alias',agent_id=agent.id) }}" class="inventory-alias-row"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="inventory_id" value="{{ item.inventory_id }}"><div><strong>{{ item.effective_name }}</strong><small>{{ item.inventory_id }}{% if item.serial_path %} · {{ item.serial_path }}{% endif %}</small></div><input name="alias" value="{{ (agent.inventory_aliases|default({})).get(item.inventory_id,'') }}" placeholder="Eigener Gerätename"><button class="button">Speichern</button></form>{% endfor %}
           </div>{% endfor %}
         </div>
       </details>
       {% endif %}
       <div class="miniguard-tools">
         <details class="miniguard-diagnostics">
-          <summary>Diagnose</summary>
+          <summary>Technische Details</summary>
           <div class="miniguard-details-body">
             <dl class="detail-grid">
               <div><dt>Letzter Poll</dt><dd>{{ agent.last_poll or '—' }}</dd></div>
@@ -231,13 +254,15 @@ async function copyMiniGuardCommand(elementId) {
             <form method="post" action="{{ url_for('miniguard_inventory', agent_id=agent.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button primary" type="submit">Hardwareinventar aktualisieren</button></form>
           </div>
         </details>
+        {% if not agent.remote_management_ready %}
         <details class="miniguard-update" id="miniguard-update-details-{{ agent.id }}">
-          <summary>Agent aktualisieren</summary>
+          <summary>Bootstrap-Update</summary>
           <div class="miniguard-details-body">
             <pre id="miniguard-update-{{ agent.id }}"><code>{{ agent.update_command }}</code></pre>
             <button class="button" type="button" onclick="copyMiniGuardCommand('miniguard-update-{{ agent.id }}')">Befehl kopieren</button>
           </div>
         </details>
+        {% endif %}
       </div>
       {% endif %}
       <div class="miniguard-footer-actions">
@@ -277,6 +302,7 @@ function renderMiniGuardActionResult(form, payload) {
   const details = form.closest("details");
   const result = details?.querySelector(".miniguard-inline-result");
   if (!result) return;
+
   result.hidden = false;
   result.className = `miniguard-inline-result ${payload.ok ? "is-success" : "is-error"}`;
   result.replaceChildren();
@@ -288,10 +314,108 @@ function renderMiniGuardActionResult(form, payload) {
   result.append(heading, message);
 
   const detailPayload = payload.details || {};
+
+  if (payload.action === "run_diagnostics" && payload.ok) {
+    const service = detailPayload.service || {};
+    const tools = detailPayload.tools || {};
+    const active = service.ActiveState || "";
+    const sub = service.SubState || "";
+    const exitStatus = String(service.ExecMainStatus ?? "");
+    const restarts = Number(service.NRestarts || 0);
+
+    const checks = [
+      {label:"Konfiguration", ok:detailPayload.config_readable === true, warning:false,
+       text:detailPayload.config_readable === true ? "lesbar" : "nicht lesbar"},
+      {label:"Dienst", ok:active === "active" && (!sub || sub === "running"), warning:!active,
+       text:active ? (sub ? `${active} / ${sub}` : active) : "Status nicht verfügbar"},
+      {label:"Agent-Update", ok:detailPayload.agent_writable === true,
+       warning:detailPayload.agent_writable !== true,
+       text:detailPayload.agent_writable === true ? "bereit" : "nicht beschreibbar"},
+      {label:"Neustarts", ok:restarts === 0, warning:restarts > 0, text:String(restarts)}
+    ];
+    if (exitStatus !== "") {
+      checks.splice(2,0,{label:"Exit-Status",ok:exitStatus === "0",warning:false,text:exitStatus});
+    }
+
+    const problems = checks.filter(item => !item.ok && !item.warning);
+    const warnings = checks.filter(item => item.warning);
+
+    heading.textContent = problems.length
+      ? `${problems.length} Diagnoseproblem${problems.length === 1 ? "" : "e"}`
+      : warnings.length
+        ? `Grundzustand OK - ${warnings.length} Hinweis${warnings.length === 1 ? "" : "e"}`
+        : "Alles OK";
+    message.textContent = problems.length
+      ? "Mindestens ein grundlegender MiniGuard-Check benötigt Aufmerksamkeit."
+      : "Agent und Dienst sind betriebsbereit.";
+    result.className = `miniguard-inline-result ${problems.length ? "is-error" : warnings.length ? "is-warning" : "is-success"}`;
+
+    const grid=document.createElement("div");
+    grid.className="miniguard-diagnostic-summary";
+    checks.forEach(item=>{
+      const row=document.createElement("div");
+      row.className=`miniguard-diagnostic-item ${item.ok ? "is-ok" : item.warning ? "is-warning" : "is-error"}`;
+      const icon=document.createElement("span"); icon.className="miniguard-diagnostic-icon"; icon.textContent=item.ok ? "✓" : item.warning ? "!" : "×";
+      const label=document.createElement("strong"); label.textContent=item.label;
+      const value=document.createElement("span"); value.textContent=item.text;
+      row.append(icon,label,value); grid.appendChild(row);
+    });
+
+    const toolNames=Object.keys(tools);
+    if(toolNames.length){
+      const available=toolNames.filter(name=>tools[name]);
+      const missing=toolNames.filter(name=>!tools[name]);
+      const capabilities=detailPayload.identity?.capabilities || [];
+      const hasApt=tools["apt-get"]===true, hasDnf=tools.dnf===true, hasCheckupdates=tools.checkupdates===true;
+
+      const toolInfo={
+        docker:{title:"Docker",purpose:"Nur nötig, wenn LANaxy Docker-Container auf diesem Host überwachen soll.",hint:hasApt?"Für Docker-Guardians Docker Engine nach offizieller Anleitung installieren.":"Für Docker-Guardians Docker Engine passend zur Distribution installieren.",docs:"https://docs.docker.com/engine/install/"},
+        sensors:{title:"lm-sensors",purpose:"Ermöglicht Hardware-Sensor-Guardians für Temperaturen, Lüfter und Spannungen.",hint:hasApt?"Optional: Paket „lm-sensors“ installieren.":"Optional: lm-sensors über den Paketmanager installieren.",docs:"https://github.com/lm-sensors/lm-sensors"},
+        ipmitool:{title:"IPMItool",purpose:"Alternative Sensorquelle für Server mit BMC/IPMI.",hint:hasApt?"Nur für Server mit IPMI/BMC relevant; meist Paket „ipmitool“.":"Nur für Systeme mit IPMI/BMC relevant.",docs:"https://github.com/ipmitool/ipmitool"},
+        checkupdates:{title:"checkupdates",purpose:"Prüft Paketupdates auf Arch-Linux-Systemen.",hint:hasApt||hasDnf?"Auf diesem Host nicht erforderlich, weil ein anderer Paketmanager vorhanden ist.":"Auf Arch Linux über das Paket pacman-contrib verfügbar.",docs:"https://man.archlinux.org/man/checkupdates.8"},
+        dnf:{title:"DNF",purpose:"Paketverwaltung für Fedora/RHEL-artige Systeme.",hint:hasApt||hasCheckupdates?"Auf diesem Host nicht erforderlich, weil ein anderer Paketmanager vorhanden ist.":"Nur für Fedora/RHEL-artige Systeme relevant.",docs:"https://dnf.readthedocs.io/"},
+        "apt-get":{title:"APT",purpose:"Paketverwaltung für Debian, Ubuntu und Proxmox.",hint:hasDnf||hasCheckupdates?"Auf diesem Host nicht erforderlich, weil ein anderer Paketmanager vorhanden ist.":"Unter Debian/Ubuntu/Proxmox normalerweise Bestandteil des Basissystems.",docs:"https://www.debian.org/doc/manuals/debian-reference/ch02.en.html"},
+        smartctl:{title:"smartmontools",purpose:"Wird für SMART-Guardians zur Prüfung von HDDs und SSDs benötigt.",hint:hasApt?"Für SMART-Guardians das Paket „smartmontools“ installieren.":"Für SMART-Guardians smartmontools über den Paketmanager installieren.",docs:"https://www.smartmontools.org/"},
+        lsusb:{title:"usbutils / lsusb",purpose:"Wird für detaillierte USB-Geräteerkennung verwendet.",hint:hasApt?"Bei Bedarf das Paket „usbutils“ installieren.":"Bei Bedarf usbutils über den Paketmanager installieren.",docs:"https://github.com/gregkh/usbutils"},
+        lspci:{title:"pciutils / lspci",purpose:"Wird für PCI- und Passthrough-Guardians benötigt.",hint:hasApt?"Für PCI-Guardians das Paket „pciutils“ installieren.":"Für PCI-Guardians pciutils über den Paketmanager installieren.",docs:"https://mj.ucw.cz/sw/pciutils/"},
+        zpool:{title:"OpenZFS",purpose:"Wird für ZFS-Pool-Guardians benötigt.",hint:"Nur relevant, wenn dieser Host ZFS-Pools verwaltet.",docs:"https://openzfs.github.io/openzfs-docs/"},
+        findmnt:{title:"findmnt",purpose:"Hilft beim Prüfen von Mountpoints und SMB/NFS-Freigaben.",hint:hasApt?"Normalerweise Bestandteil des Pakets „util-linux“.":"Normalerweise Bestandteil von util-linux.",docs:"https://man7.org/linux/man-pages/man8/findmnt.8.html"}
+      };
+
+      const toolRow=document.createElement("div"); toolRow.className="miniguard-diagnostic-tools";
+      const summary=document.createElement("span"); summary.textContent=`Werkzeuge: ${available.length}/${toolNames.length} verfügbar`;
+      const explain=document.createElement("small"); explain.textContent=missing.length?"Fehlende optionale Werkzeuge sind nicht automatisch ein Problem.":"Alle erkannten Werkzeuge sind vorhanden.";
+      toolRow.append(summary,explain); grid.appendChild(toolRow);
+
+      if(missing.length){
+        const guidance=document.createElement("div"); guidance.className="miniguard-tool-guidance";
+        missing.forEach(name=>{
+          const info=toolInfo[name]||{title:name,purpose:"Optionales Werkzeug für zusätzliche MiniGuard-Funktionen.",hint:"Nur installieren, wenn du die zugehörige Funktion verwenden möchtest.",docs:""};
+          let relevance="optional", relevanceText="Optional";
+          if((name==="dnf"&&(hasApt||hasCheckupdates))||(name==="checkupdates"&&(hasApt||hasDnf))||(name==="apt-get"&&(hasDnf||hasCheckupdates))){ relevance="not-needed"; relevanceText="Nicht nötig"; }
+          if((name==="smartctl"&&capabilities.includes("smart"))||(name==="lspci"&&capabilities.includes("pci_device"))||(name==="zpool"&&capabilities.includes("zfs_raid"))){ relevance="recommended"; relevanceText="Empfohlen"; }
+
+          const card=document.createElement("div"); card.className=`miniguard-tool-guidance-card is-${relevance}`;
+          const head=document.createElement("div"); head.className="miniguard-tool-guidance-head";
+          const title=document.createElement("strong"); title.textContent=info.title;
+          const badge=document.createElement("span"); badge.className="badge"; badge.textContent=relevanceText;
+          head.append(title,badge);
+          const purpose=document.createElement("p"); purpose.textContent=info.purpose;
+          const hint=document.createElement("small"); hint.textContent=info.hint;
+          card.append(head,purpose,hint);
+          if(info.docs){ const link=document.createElement("a"); link.className="button"; link.href=info.docs; link.target="_blank"; link.rel="noopener noreferrer"; link.textContent="Offizielle Dokumentation"; card.appendChild(link); }
+          guidance.appendChild(card);
+        });
+        result.appendChild(guidance);
+      }
+    }
+    result.appendChild(grid);
+  }
+
   if (detailPayload.logs) {
-    const pre = document.createElement("pre");
-    const code = document.createElement("code");
-    code.textContent = detailPayload.logs;
+    const pre=document.createElement("pre");
+    const code=document.createElement("code");
+    code.textContent=detailPayload.logs;
     pre.appendChild(code);
     result.appendChild(pre);
   }

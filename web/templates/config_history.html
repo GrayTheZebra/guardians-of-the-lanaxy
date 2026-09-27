@@ -24,7 +24,7 @@
     <article class="summary-card"><div><strong>{{ config_history_stats.count }}</strong><span>Stände</span></div></article>
     <article class="summary-card"><div><strong>{{ config_history_stats.size_human }}</strong><span>Speicherbedarf</span></div></article>
     <article class="summary-card"><div><strong>{{ 'Unbegrenzt' if config_history_retention_days <= 0 else config_history_retention_days ~ ' Tage' }}</strong><span>Aufbewahrung</span></div></article>
-    <article class="summary-card"><div><strong>{{ config_history_stats.oldest|replace('T', ' ') if config_history_stats.oldest else '—' }}</strong><span>Ältester Stand</span></div></article>
+    <article class="summary-card"><div><strong{% if config_history_stats.oldest %} data-lanaxy-datetime="{{ config_history_stats.oldest }}"{% endif %}>{{ config_history_stats.oldest if config_history_stats.oldest else '—' }}</strong><span>Ältester Stand</span></div></article>
 </section>
 
 <section class="chart-card config-history-toolbar">
@@ -67,7 +67,7 @@
                     {% if e.meta.critical_change|default(false) %}<span class="badge warning">Sicherheitsrelevant</span>{% endif %}
                 </div>
                 <small>
-                    {{ e.modified|replace('T', ' ') }} · {{ e.size }} Bytes
+                    <span data-lanaxy-datetime="{{ e.modified }}">{{ e.modified }}</span> · {{ e.size }} Bytes
                     {% if e.meta %}
                         · {{ e.meta.guardians|default(0) }} Guardians
                         · {{ e.meta.beacons|default(0) }} Beacons

@@ -4,7 +4,7 @@
 
 LANaxy prüft Dienste und Systeme über **Guardians**, bewertet Statusänderungen über **Rules**, meldet Ereignisse über **Beacons** und lässt sich über geschützte **Portale** von außen steuern. **MiniGuards** ergänzen die zentrale Installation um lokale Prüfungen und Hardwareinventar auf weiteren Linux-Systemen.
 
-> Aktuelle Version: **1.0.6**
+> Aktuelle Version: **1.0.7**
 
 ## Inhalt
 
