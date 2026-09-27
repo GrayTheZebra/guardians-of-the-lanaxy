@@ -952,7 +952,7 @@ def create_app() -> Flask:
             ),
             submit_label="Weiter zu Beacons",
             extra_kind="guardian",
-            return_to=return_to,
+            component_type=guardian_type,
             groups=sorted({
                 item.get("group")
                 for item in service.load().get("checks", [])
@@ -6140,6 +6140,94 @@ def create_app() -> Flask:
             actor=actor,
         )
         return task_id, wait_for_miniguard_task(task_id, timeout=timeout)
+
+    @app.get("/api/miniguards/<agent_id>/disks")
+    def miniguard_disks_api(agent_id):
+        agent = get_miniguard(agent_id)
+        if not agent:
+            return jsonify({"ok": False, "error": "MiniGuard wurde nicht gefunden."}), 404
+
+        force_refresh = request.args.get("refresh") == "1"
+
+        def extract_disks(inventory):
+            inventory = inventory or {}
+            raw_disks = inventory.get("disks") or []
+
+            def human_size(value):
+                try:
+                    size = float(value or 0)
+                except (TypeError, ValueError):
+                    size = 0
+                units = ("B", "KB", "MB", "GB", "TB", "PB")
+                for unit in units:
+                    if size < 1024 or unit == units[-1]:
+                        if unit == "B":
+                            return f"{int(size)} {unit}"
+                        return f"{size:.1f} {unit}"
+                    size /= 1024
+                return "0 B"
+
+            disks = []
+            for item in raw_disks:
+                if not isinstance(item, dict):
+                    continue
+                path_value = str(item.get("path") or "").strip()
+                if not path_value.startswith("/dev/"):
+                    continue
+                disks.append({
+                    "path": path_value,
+                    "model": str(item.get("model") or "").strip(),
+                    "serial": str(item.get("serial") or "").strip(),
+                    "transport": str(item.get("tran") or "").strip(),
+                    "size_human": human_size(item.get("size")),
+                    "mountpoints": item.get("mountpoints") or [],
+                })
+
+            disks.sort(key=lambda item: item["path"])
+            return disks
+
+        cached_inventory = (
+            agent.get("hardware_inventory_normalized")
+            or agent.get("hardware_inventory")
+            or {}
+        )
+        disks = extract_disks(cached_inventory)
+        source = "cache"
+        inventory_updated_at = agent.get("inventory_updated_at")
+
+        if force_refresh or not disks:
+            try:
+                outcome = miniguard_execute_remote_check(
+                    agent_id,
+                    "hardware_inventory",
+                    {"name": "SMART Datenträgererkennung"},
+                    60,
+                )
+                if outcome.get("status") == "ok":
+                    live_inventory = outcome.get("details") or {}
+                    disks = extract_disks(live_inventory)
+                    source = "live"
+                    inventory_updated_at = live_inventory.get("generated_at")
+                elif not disks:
+                    return jsonify({
+                        "ok": False,
+                        "error": outcome.get("message") or "Hardwareinventar konnte nicht geladen werden.",
+                    }), 502
+            except Exception as error:
+                if not disks:
+                    return jsonify({
+                        "ok": False,
+                        "error": f"Hardwareinventar konnte nicht geladen werden: {error}",
+                    }), 502
+
+        return jsonify({
+            "ok": True,
+            "agent_id": agent_id,
+            "agent_name": agent.get("name") or agent_id,
+            "inventory_updated_at": inventory_updated_at,
+            "source": source,
+            "disks": disks,
+        })
 
     @app.get("/system/miniguards")
     def miniguards_page():
