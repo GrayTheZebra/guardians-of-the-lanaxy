@@ -115,7 +115,9 @@ from ai_planner import AI_SECRET_PLACEHOLDER, provider_catalog as ai_provider_ca
 from web.config_service import (
     ConfigService,
     configuration_inventory,
-    prune_configuration_history,
+    configuration_changed_sections,
+    configuration_history_stats,
+    prune_configuration_history_by_age,
     SECRET_PLACEHOLDER,
     build_check_from_form,
     discover_guardians,
@@ -5694,8 +5696,14 @@ def create_app() -> Flask:
             backup_keep_count=int(
                 config.get("lanaxy", {}).get("backup_keep_count", 20)
             ),
-            config_history_keep=int(
-                config.get("lanaxy", {}).get("config_history_keep", 100)
+            config_history_retention_days=int(
+                config.get("lanaxy", {}).get(
+                    "config_history_retention_days",
+                    -1,
+                )
+            ),
+            config_history_stats=configuration_history_stats(
+                Path(service.backup_dir)
             ),
             database_stats=database_stats(
                 config.get("lanaxy", {}).get(
@@ -5925,15 +5933,32 @@ def create_app() -> Flask:
     def config_history_page():
         entries = []
         config = service.load()
-        history_keep = max(
-            5,
-            int(config.get("lanaxy", {}).get("config_history_keep", 100)),
+        history_retention_days = int(
+            config.get("lanaxy", {}).get("config_history_retention_days", -1)
         )
-        prune_configuration_history(Path(service.backup_dir), history_keep)
-        for path in sorted(
+        prune_configuration_history_by_age(
+            Path(service.backup_dir),
+            history_retention_days,
+        )
+
+        paths = sorted(
             Path(service.backup_dir).glob("config-*.yaml"),
+            key=lambda path: path.stat().st_mtime,
             reverse=True,
-        )[:history_keep]:
+        )
+        current_config = config
+        archived_configs = []
+        for path in paths:
+            try:
+                archived_configs.append(
+                    __import__("yaml").safe_load(
+                        path.read_text(encoding="utf-8")
+                    ) or {}
+                )
+            except Exception:
+                archived_configs.append({})
+
+        for index, path in enumerate(paths):
             meta = {}
             try:
                 meta = json.loads(
@@ -5942,15 +5967,23 @@ def create_app() -> Flask:
             except Exception:
                 pass
 
-            # Older metadata files contained only counts. Read the archived
-            # YAML as a fallback so existing revisions gain the detailed list
-            # without requiring a migration.
+            archived_config = archived_configs[index]
             try:
-                archived_config = __import__("yaml").safe_load(
-                    path.read_text(encoding="utf-8")
-                ) or {}
                 inventory = configuration_inventory(archived_config)
                 for key, value in inventory.items():
+                    meta.setdefault(key, value)
+            except Exception:
+                pass
+
+            try:
+                after_config = (
+                    current_config if index == 0 else archived_configs[index - 1]
+                )
+                summary = configuration_changed_sections(
+                    archived_config,
+                    after_config,
+                )
+                for key, value in summary.items():
                     meta.setdefault(key, value)
             except Exception:
                 pass
@@ -5963,7 +5996,15 @@ def create_app() -> Flask:
                 ).isoformat(timespec="seconds"),
                 "meta": meta,
             })
-        return render_template("config_history.html", entries=entries)
+
+        return render_template(
+            "config_history.html",
+            entries=entries,
+            config_history_stats=configuration_history_stats(
+                Path(service.backup_dir)
+            ),
+            config_history_retention_days=history_retention_days,
+        )
 
     @app.get("/system/config-history/<path:name>/diff")
     def config_history_diff(name):
@@ -5988,6 +6029,41 @@ def create_app() -> Flask:
             restored=__import__('yaml').safe_load(path.read_text()) or {}
             service.save(restored); restart_lanaxy(); flash("Konfigurationsstand wurde wiederhergestellt.","success")
         except Exception as error: flash(f"Wiederherstellung fehlgeschlagen: {error}","error")
+        return redirect(url_for("config_history_page"))
+
+
+    @app.post("/system/config-history/prune")
+    def config_history_prune():
+        config = service.load()
+        days = int(
+            config.get("lanaxy", {}).get("config_history_retention_days", -1)
+        )
+        result = prune_configuration_history_by_age(
+            Path(service.backup_dir),
+            days,
+        )
+        if days <= 0:
+            flash("Konfigurationshistorie ist auf unbegrenzte Aufbewahrung eingestellt.", "success")
+        else:
+            flash(
+                f"Aufbewahrungsregel angewendet: {result['history']} alte Konfigurationsstände entfernt.",
+                "success",
+            )
+        return redirect(url_for("config_history_page"))
+
+    @app.post("/system/config-history/clear")
+    def config_history_clear():
+        backup_dir = Path(service.backup_dir)
+        deleted = 0
+        for path in backup_dir.glob("config-*.yaml"):
+            path.unlink(missing_ok=True)
+            deleted += 1
+        for sidecar in backup_dir.glob("config-*.json"):
+            sidecar.unlink(missing_ok=True)
+        flash(
+            f"Konfigurationshistorie geleert: {deleted} Stände entfernt.",
+            "success",
+        )
         return redirect(url_for("config_history_page"))
 
     @app.route("/system/cluster", methods=["GET","POST"])
@@ -6478,29 +6554,47 @@ def create_app() -> Flask:
             backup_keep_count = max(
                 1, min(500, int(request.form.get("backup_keep_count", 20)))
             )
-            config_history_keep = max(
-                5, min(2000, int(request.form.get("config_history_keep", 100)))
+            raw_history_days = int(
+                request.form.get("config_history_retention_days", -1)
             )
+            config_history_retention_days = (
+                -1
+                if raw_history_days <= 0
+                else min(3650, raw_history_days)
+            )
+
             lanaxy_settings = config.setdefault("lanaxy", {})
             lanaxy_settings["retention_days"] = retention_days
             lanaxy_settings["backup_keep_count"] = backup_keep_count
-            lanaxy_settings["config_history_keep"] = config_history_keep
+            lanaxy_settings["config_history_retention_days"] = (
+                config_history_retention_days
+            )
+            lanaxy_settings.pop("config_history_keep", None)
+
             service.save(config)
             prune_backups(backup_keep_count)
-            prune_configuration_history(
-                Path(service.backup_dir), config_history_keep
+            history_result = prune_configuration_history_by_age(
+                Path(service.backup_dir),
+                config_history_retention_days,
             )
             restart_lanaxy()
+
+            history_text = (
+                "unbegrenzt"
+                if config_history_retention_days <= 0
+                else f"{config_history_retention_days} Tage"
+            )
             flash(
-                "Aufbewahrung gespeichert: "
+                "Aufbewahrung gespeichert und angewendet: "
                 f"{retention_days} Tage Datenbank, "
-                f"{backup_keep_count} Backups und "
-                f"{config_history_keep} Konfigurationsstände.",
+                f"{backup_keep_count} Backups, "
+                f"Konfigurationshistorie {history_text}. "
+                f"{history_result['history']} alte Konfigurationsstände entfernt.",
                 "success",
             )
         except Exception as error:
             flash(str(error), "error")
-        return redirect(url_for("system_page") + "#maintenance")
+        return redirect(url_for("system_page") + "#data")
 
     @app.post("/system/maintenance/cleanup")
     def maintenance_cleanup():
@@ -6523,7 +6617,7 @@ def create_app() -> Flask:
             )
         except Exception as error:
             flash(f"Datenbereinigung fehlgeschlagen: {error}", "error")
-        return redirect(url_for("system_page") + "#maintenance")
+        return redirect(url_for("system_page") + "#data")
 
     @app.post("/system/maintenance/clear-events")
     def maintenance_clear_events():
@@ -6536,7 +6630,7 @@ def create_app() -> Flask:
             )
         except Exception as error:
             flash(str(error), "error")
-        return redirect(url_for("system_page") + "#maintenance")
+        return redirect(url_for("system_page") + "#data")
 
     @app.post("/system/maintenance/clear-history")
     def maintenance_clear_history():
@@ -6549,7 +6643,7 @@ def create_app() -> Flask:
             )
         except Exception as error:
             flash(str(error), "error")
-        return redirect(url_for("system_page") + "#maintenance")
+        return redirect(url_for("system_page") + "#data")
 
     @app.post("/system/backups/create")
     def backup_create():
