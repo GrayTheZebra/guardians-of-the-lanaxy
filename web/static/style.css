@@ -2575,12 +2575,16 @@ a.runtime-state-action {
     line-height: 1;
     cursor: help;
 }
-.field-help:hover,
-.field-help:focus-visible {
-    border-color: #8d7aff;
+.field-help:hover {
+    border-color: var(--accent-light);
     color: #fff;
-    background: rgba(101, 69, 245, .28);
+    background: rgba(57, 234, 125, .16);
     outline: none;
+}
+
+.field-help:focus-visible {
+    outline: 2px solid rgba(57, 234, 125, .64);
+    outline-offset: 2px;
 }
 .field-help::before,
 .field-help::after {
@@ -2601,10 +2605,10 @@ a.runtime-state-action {
     width: max-content;
     max-width: min(340px, calc(100vw - 42px));
     padding: 10px 12px;
-    border: 1px solid rgba(140, 109, 255, .5);
+    border: 1px solid rgba(57, 234, 125, .42);
     border-radius: 8px;
     color: #e6edf8;
-    background: #101d31;
+    background: #0b100d;
     box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
     font-size: 12px;
     font-weight: 400;
@@ -2618,13 +2622,11 @@ a.runtime-state-action {
     bottom: calc(100% + 5px);
     left: 50%;
     border: 6px solid transparent;
-    border-top-color: rgba(140, 109, 255, .65);
+    border-top-color: rgba(57, 234, 125, .55);
     transform: translate(-50%, 5px);
 }
 .field-help:hover::before,
-.field-help:hover::after,
-.field-help:focus-visible::before,
-.field-help:focus-visible::after {
+.field-help:hover::after {
     opacity: 1;
     visibility: visible;
     transform: translate(-50%, 0);
@@ -2645,8 +2647,7 @@ a.runtime-state-action {
     .field-help::after {
         display: none;
     }
-    .field-help:hover::before,
-    .field-help:focus-visible::before {
+    .field-help:hover::before {
         transform: translateY(0);
     }
 }
