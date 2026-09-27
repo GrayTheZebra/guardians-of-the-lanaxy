@@ -1,21 +1,73 @@
 {% extends "base.html" %}
 {% block title %}Konfigurationshistorie · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-heading">
+<div class="page-heading config-history-heading">
     <div>
         <p class="eyebrow">System</p>
         <h1>Konfigurationshistorie</h1>
         <p>Automatisch erzeugte Stände vor jeder Änderung.</p>
     </div>
+    <div class="heading-actions">
+        <form method="post" action="{{ url_for('config_history_prune') }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="button" type="submit">Aufbewahrung jetzt anwenden</button>
+        </form>
+        <form method="post" action="{{ url_for('config_history_clear') }}"
+              onsubmit="return confirm('Wirklich die gesamte Konfigurationshistorie löschen? Die aktuelle Konfiguration bleibt erhalten, die historischen Wiederherstellungspunkte werden jedoch unwiderruflich entfernt.')">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="button danger" type="submit">Historie leeren</button>
+        </form>
+    </div>
 </div>
+
+<section class="config-history-summary-grid">
+    <article class="summary-card"><div><strong>{{ config_history_stats.count }}</strong><span>Stände</span></div></article>
+    <article class="summary-card"><div><strong>{{ config_history_stats.size_human }}</strong><span>Speicherbedarf</span></div></article>
+    <article class="summary-card"><div><strong>{{ 'Unbegrenzt' if config_history_retention_days <= 0 else config_history_retention_days ~ ' Tage' }}</strong><span>Aufbewahrung</span></div></article>
+    <article class="summary-card"><div><strong>{{ config_history_stats.oldest|replace('T', ' ') if config_history_stats.oldest else '—' }}</strong><span>Ältester Stand</span></div></article>
+</section>
+
+<section class="chart-card config-history-toolbar">
+    <label>
+        <span>Suche</span>
+        <input id="config-history-search" type="search" placeholder="Datei, Bereich oder Inhalt …">
+    </label>
+    <label>
+        <span>Geänderter Bereich</span>
+        <select id="config-history-section-filter">
+            <option value="">Alle Bereiche</option>
+            <option>Guardians</option>
+            <option>Beacons</option>
+            <option>Rules</option>
+            <option>Portals</option>
+            <option>Netzwerk & MQTT</option>
+            <option>Oberfläche</option>
+            <option>Datum & Uhrzeit</option>
+            <option>System & Aufbewahrung</option>
+            <option>Zugriff & Sicherheit</option>
+            <option>Wartung</option>
+        </select>
+    </label>
+    <label class="checkbox-row config-history-critical-filter">
+        <input id="config-history-critical" type="checkbox">
+        <span>Nur sicherheitsrelevante Änderungen</span>
+    </label>
+</section>
+
 <section class="chart-card">
-    <div class="history-list config-history-list">
+    <div class="history-list config-history-list" id="config-history-list">
         {% for e in entries %}
-        <article class="history-row config-history-row">
+        <article class="history-row config-history-row"
+                 data-sections="{{ e.meta.changed_sections|default([])|join('|') }}"
+                 data-critical="{{ '1' if e.meta.critical_change|default(false) else '0' }}"
+                 data-search="{{ (e.name ~ ' ' ~ e.meta.changed_sections|default([])|join(' ') ~ ' ' ~ e.meta.guardian_names|default([])|join(' ') ~ ' ' ~ e.meta.beacon_names|default([])|join(' ') ~ ' ' ~ e.meta.rule_names|default([])|join(' ') ~ ' ' ~ e.meta.portal_names|default([])|join(' '))|lower }}">
             <div class="config-history-main">
-                <strong>{{ e.name }}</strong>
+                <div class="config-history-title-row">
+                    <strong>{{ e.name }}</strong>
+                    {% if e.meta.critical_change|default(false) %}<span class="badge warning">Sicherheitsrelevant</span>{% endif %}
+                </div>
                 <small>
-                    {{ e.modified }} · {{ e.size }} Bytes
+                    {{ e.modified|replace('T', ' ') }} · {{ e.size }} Bytes
                     {% if e.meta %}
                         · {{ e.meta.guardians|default(0) }} Guardians
                         · {{ e.meta.beacons|default(0) }} Beacons
@@ -23,24 +75,17 @@
                         · {{ e.meta.portals|default(0) }} Portals
                     {% endif %}
                 </small>
+                {% if e.meta.changed_sections|default([]) %}
+                <div class="config-history-changes">
+                    {% for section in e.meta.changed_sections %}<span class="badge">{{ section }}</span>{% endfor %}
+                </div>
+                {% endif %}
                 {% if e.meta %}
                 <div class="config-history-inventory">
-                    <div>
-                        <span>Guardians</span>
-                        <p>{{ e.meta.guardian_names|default([])|join(', ') if e.meta.guardian_names|default([]) else 'Keine' }}</p>
-                    </div>
-                    <div>
-                        <span>Beacons</span>
-                        <p>{{ e.meta.beacon_names|default([])|join(', ') if e.meta.beacon_names|default([]) else 'Keine' }}</p>
-                    </div>
-                    <div>
-                        <span>Rules</span>
-                        <p>{{ e.meta.rule_names|default([])|join(', ') if e.meta.rule_names|default([]) else 'Keine' }}</p>
-                    </div>
-                    <div>
-                        <span>Portals</span>
-                        <p>{{ e.meta.portal_names|default([])|join(', ') if e.meta.portal_names|default([]) else 'Keine' }}</p>
-                    </div>
+                    <div><span>Guardians</span><p>{{ e.meta.guardian_names|default([])|join(', ') if e.meta.guardian_names|default([]) else 'Keine' }}</p></div>
+                    <div><span>Beacons</span><p>{{ e.meta.beacon_names|default([])|join(', ') if e.meta.beacon_names|default([]) else 'Keine' }}</p></div>
+                    <div><span>Rules</span><p>{{ e.meta.rule_names|default([])|join(', ') if e.meta.rule_names|default([]) else 'Keine' }}</p></div>
+                    <div><span>Portals</span><p>{{ e.meta.portal_names|default([])|join(', ') if e.meta.portal_names|default([]) else 'Keine' }}</p></div>
                 </div>
                 {% endif %}
             </div>
@@ -57,5 +102,36 @@
         <p>Noch keine historischen Stände vorhanden.</p>
         {% endfor %}
     </div>
+    <p id="config-history-filter-empty" class="empty-state" hidden>Keine Einträge entsprechen dem Filter.</p>
 </section>
+
+<script>
+(() => {
+    const search = document.getElementById('config-history-search');
+    const section = document.getElementById('config-history-section-filter');
+    const critical = document.getElementById('config-history-critical');
+    const rows = [...document.querySelectorAll('.config-history-row')];
+    const empty = document.getElementById('config-history-filter-empty');
+
+    function applyFilter() {
+        const term = (search?.value || '').trim().toLowerCase();
+        const sectionValue = section?.value || '';
+        const criticalOnly = Boolean(critical?.checked);
+        let visible = 0;
+        rows.forEach((row) => {
+            const matchesText = !term || (row.dataset.search || '').includes(term);
+            const sections = (row.dataset.sections || '').split('|').filter(Boolean);
+            const matchesSection = !sectionValue || sections.includes(sectionValue);
+            const matchesCritical = !criticalOnly || row.dataset.critical === '1';
+            row.hidden = !(matchesText && matchesSection && matchesCritical);
+            if (!row.hidden) visible += 1;
+        });
+        if (empty) empty.hidden = visible !== 0 || rows.length === 0;
+    }
+
+    search?.addEventListener('input', applyFilter);
+    section?.addEventListener('change', applyFilter);
+    critical?.addEventListener('change', applyFilter);
+})();
+</script>
 {% endblock %}
