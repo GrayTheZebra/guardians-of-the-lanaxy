@@ -3954,3 +3954,720 @@ select option{background:#111b2a;color:var(--text)}
     .global-security-warning { grid-template-columns: auto 1fr; }
     .global-security-warning .button { grid-column: 1 / -1; justify-self: start; }
 }
+
+/* === LANAXY TERMINAL DESIGN 1.0.3 START === */
+
+/*
+ * LANaxy terminal-oriented visual system:
+ * - anthracite application background
+ * - subtly green-tinted cards and panels
+ * - terminal green primary accent
+ * - square UI surfaces without rounded corners
+ * - shared visual treatment for historically separate card systems
+ * - corrected card/context-menu stacking and green/anthracite menus
+ */
+
+:root {
+    color-scheme: dark;
+
+    --bg: #0a0d0b;
+    --bg-deep: #070907;
+    --sidebar: #090d0b;
+
+    --panel: #101712;
+    --panel-light: #141d17;
+    --panel-raised: #172119;
+
+    --line: #243129;
+    --line-soft: rgba(132, 160, 143, .12);
+    --line-strong: #355042;
+
+    --text: #eef5f0;
+    --muted: #8ea197;
+    --muted-strong: #b0c1b8;
+
+    --accent: #39ea7d;
+    --accent-light: #70f5a3;
+    --accent-dark: #21c764;
+    --accent-soft: rgba(57, 234, 125, .08);
+    --accent-soft-strong: rgba(57, 234, 125, .15);
+
+    --blue: #39ea7d;
+    --cyan: #6bf0a0;
+
+    --ok: #39ea7d;
+    --warning: #e8bd56;
+    --critical: #ff6572;
+
+    --ui-surface: linear-gradient(
+        180deg,
+        rgba(15, 22, 18, .985),
+        rgba(11, 16, 13, .985)
+    );
+    --ui-surface-hover: linear-gradient(
+        180deg,
+        rgba(17, 25, 20, .99),
+        rgba(12, 18, 14, .99)
+    );
+    --ui-surface-flat: #101712;
+    --ui-surface-deep: #0b100d;
+    --ui-border: #2a3a32;
+}
+
+html,
+body {
+    background:
+        linear-gradient(rgba(57, 234, 125, .010) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(57, 234, 125, .008) 1px, transparent 1px),
+        linear-gradient(180deg, #0a0d0b, #070907) !important;
+    background-size: 34px 34px, 34px 34px, auto !important;
+}
+
+body {
+    color: var(--text);
+}
+
+.app-shell {
+    grid-template-columns: 252px minmax(0, 1fr);
+}
+
+.main-content {
+    padding: 28px 30px 18px;
+    background: transparent !important;
+}
+
+.sidebar {
+    padding: 22px 13px 18px;
+    background: linear-gradient(
+        180deg,
+        rgba(9, 13, 11, .985),
+        rgba(7, 10, 8, .995)
+    ) !important;
+    border-right: 1px solid #233027;
+    box-shadow: none;
+}
+
+.sidebar-brand {
+    gap: 12px;
+    padding: 0 9px 24px;
+}
+
+.sidebar-brand strong {
+    font-size: 25px;
+    letter-spacing: -.035em;
+}
+
+.logo-shield {
+    width: 43px;
+    height: 43px;
+    border-radius: 0 !important;
+    color: var(--accent);
+    background: #0c1510 !important;
+    border: 1px solid rgba(57, 234, 125, .52);
+    box-shadow: none;
+}
+
+.logo-shield svg {
+    width: 27px;
+    height: 27px;
+}
+
+.sidebar-nav {
+    gap: 3px;
+}
+
+.nav-item {
+    position: relative;
+    min-height: 45px;
+    padding: 0 13px;
+    gap: 12px;
+    border-radius: 0 !important;
+    color: #9eafa6;
+    border: 1px solid transparent;
+    transition:
+        color .12s ease,
+        background .12s ease,
+        border-color .12s ease;
+}
+
+.nav-item:hover {
+    color: #d9e5de;
+    background: rgba(255,255,255,.022);
+}
+
+.nav-item.active {
+    color: #dffff0;
+    background: rgba(57, 234, 125, .085) !important;
+    border-color: rgba(57, 234, 125, .20);
+    box-shadow: none;
+}
+
+.nav-item.active::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    background: var(--accent);
+}
+
+.nav-tree-group.child-active > .nav-tree-parent {
+    color: #d7e5dc;
+    background: rgba(57, 234, 125, .035) !important;
+}
+
+.nav-tree-children::before {
+    background: rgba(107, 146, 122, .28) !important;
+}
+
+.nav-item.nav-tree-child::before {
+    border-bottom-color: rgba(107, 146, 122, .28) !important;
+}
+
+.nav-item.nav-tree-child.active {
+    color: #dffff0;
+    background: rgba(57, 234, 125, .06) !important;
+    border-color: rgba(57, 234, 125, .16);
+    box-shadow: none;
+}
+
+.system-mini,
+.github-card {
+    border: 1px solid var(--ui-border);
+    border-radius: 0 !important;
+    background: var(--ui-surface) !important;
+}
+
+.dashboard-heading,
+.page-heading,
+.launchpad-heading {
+    padding-bottom: 17px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid #233027;
+}
+
+.dashboard-heading h1,
+.page-heading h1,
+.launchpad-heading h1 {
+    font-size: 30px;
+    letter-spacing: -.025em;
+}
+
+.dashboard-heading p,
+.page-heading p,
+.launchpad-heading p:not(.eyebrow) {
+    color: #8fa399;
+}
+
+.eyebrow,
+.dashboard-panel-heading > a,
+.dashboard-panel-link-label,
+.launchpad-review-card > a {
+    color: var(--accent-light) !important;
+}
+
+:is(
+    .summary-card,
+    .guardian-card,
+    .config-form,
+    .type-card,
+    .empty,
+    .filter-panel,
+    .history-controls,
+    .protocol-card,
+    .chart-card,
+    .dashboard-status-card,
+    .dashboard-panel,
+    .dashboard-readiness,
+    .dashboard-editor,
+    .launchpad-type-card,
+    .launchpad-review-card,
+    .launchpad-launch-card,
+    .launchpad-explanation,
+    .launchpad-choice,
+    .module-summary-grid article,
+    .module-install-card,
+    .module-card,
+    .incident-card,
+    .bulk-toolbar,
+    .system-health-tile,
+    .system-card,
+    .readiness-check,
+    .system-mqtt-section,
+    .maintenance-banner,
+    .context-help__body,
+    .context-help__toggle,
+    .webhook-header-example,
+    .miniguard-row,
+    .miniguard-card,
+    .miniguard-management-grid details,
+    .miniguard-tools details,
+    .miniguard-inventory-details
+) {
+    border-radius: 0 !important;
+    background: var(--ui-surface) !important;
+    border-color: var(--ui-border) !important;
+    box-shadow: none !important;
+}
+
+:is(
+    .dashboard-status-card,
+    .launchpad-type-card,
+    .system-health-tile,
+    .type-card,
+    .module-card
+):hover {
+    transform: none !important;
+    background: var(--ui-surface-hover) !important;
+    border-color: #3b5948 !important;
+}
+
+.dashboard-readiness {
+    border-left-width: 3px !important;
+}
+
+.dashboard-readiness-icon,
+.dashboard-status-icon {
+    border-radius: 0 !important;
+    color: var(--accent-light) !important;
+    background: rgba(57,234,125,.055) !important;
+    border-color: rgba(57,234,125,.18) !important;
+}
+
+.dashboard-status-card.is-neutral {
+    border-bottom-color: rgba(57,234,125,.50) !important;
+}
+
+.dashboard-panel {
+    overflow: visible !important;
+}
+
+.runtime-state-action {
+    border-radius: 0 !important;
+    background: #101713 !important;
+    border-color: #26372f !important;
+}
+
+.runtime-state-action:hover {
+    background: #141e18 !important;
+}
+
+.health-overview {
+    background: rgba(57,234,125,.025) !important;
+}
+
+.launchpad-progress-step > span {
+    border-radius: 0 !important;
+    background: #0d1310 !important;
+}
+
+.launchpad-progress-step.active > span {
+    border-color: var(--accent) !important;
+    color: #041009 !important;
+    background: var(--accent) !important;
+    box-shadow: none !important;
+}
+
+.launchpad-progress-step.done::before,
+.launchpad-progress-step.active::before {
+    background: rgba(57,234,125,.65) !important;
+}
+
+.launchpad-progress-step.done > span {
+    border-color: var(--ok) !important;
+    color: var(--ok) !important;
+    background: rgba(57,234,125,.06) !important;
+}
+
+.launchpad-arrow {
+    color: var(--accent-light) !important;
+}
+
+.launchpad-form {
+    border-top-color: rgba(57,234,125,.45) !important;
+}
+
+.launchpad-choice:has(input[type="radio"]:checked) {
+    border-color: rgba(57,234,125,.52) !important;
+    background: rgba(57,234,125,.055) !important;
+}
+
+.launchpad-choice > b {
+    border-radius: 0 !important;
+    color: var(--accent-light) !important;
+    background: rgba(57,234,125,.07) !important;
+}
+
+.launchpad-review-card > span {
+    border-radius: 0 !important;
+    color: #041009 !important;
+    background: var(--accent) !important;
+}
+
+.launchpad-launch-card {
+    border-color: rgba(57,234,125,.30) !important;
+}
+
+.module-install-card {
+    border-color: #31483b !important;
+}
+
+.module-card {
+    border-top: 1px solid var(--ui-border) !important;
+    border-left: 3px solid #405449 !important;
+}
+
+.module-card.module-type-guardian,
+.module-card.module-type-beacon,
+.module-card.module-type-portal {
+    border-left-color: var(--accent) !important;
+}
+
+.module-card.status-failed {
+    border-left-color: var(--critical) !important;
+}
+
+.module-icon,
+.module-detail-icon {
+    border-radius: 0 !important;
+    color: var(--accent-light) !important;
+    background: rgba(57,234,125,.06) !important;
+    border: 1px solid rgba(57,234,125,.17);
+}
+
+.module-type-badge,
+.source-badge {
+    border-radius: 0 !important;
+}
+
+.module-type-badge.guardian {
+    color: #9af5b7 !important;
+    background: rgba(57,234,125,.075) !important;
+}
+
+.source-badge.builtin {
+    color: #91bea1 !important;
+    background: rgba(82,140,103,.08) !important;
+}
+
+.incident-card {
+    overflow: visible !important;
+    border-left-width: 3px !important;
+}
+
+.incident-card-main,
+.incident-card-stats,
+.incident-card-actions {
+    background: transparent !important;
+}
+
+.system-health-tile {
+    border-left-width: 3px !important;
+}
+
+.system-health-tile:hover {
+    border-color: #3b5948 !important;
+}
+
+.system-card-icon {
+    border-radius: 0 !important;
+    color: var(--accent-light) !important;
+    background: rgba(57,234,125,.055) !important;
+    border-color: rgba(57,234,125,.18) !important;
+}
+
+.system-card-icon svg {
+    color: var(--accent-light) !important;
+}
+
+.system-section-nav a {
+    border-radius: 0 !important;
+    background: #0e1511 !important;
+    border-color: #26372f !important;
+}
+
+.system-section-nav a:hover,
+.system-section-nav a.active {
+    color: var(--accent-light) !important;
+    border-color: rgba(57,234,125,.34) !important;
+    background: rgba(57,234,125,.05) !important;
+}
+
+.button,
+input,
+select,
+textarea {
+    border-radius: 0 !important;
+}
+
+.button {
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #304239;
+    background: #101713 !important;
+    color: #d5e1da;
+    box-shadow: none;
+}
+
+.button:hover {
+    filter: none;
+    color: #eff8f2;
+    background: #152019 !important;
+    border-color: #476554;
+}
+
+.button.primary {
+    color: #041009;
+    font-weight: 700;
+    border-color: #4ff18a;
+    background: #43e97e !important;
+}
+
+.button.primary:hover {
+    color: #020805;
+    background: #62f49a !important;
+    border-color: #78f7aa;
+}
+
+.button.action-primary {
+    color: #72f4a2;
+    border-color: rgba(57,234,125,.30);
+    background: rgba(57,234,125,.08) !important;
+}
+
+.button.danger {
+    color: #ff838d;
+    background: rgba(255, 96, 109, .07) !important;
+    border-color: rgba(255, 96, 109, .26);
+}
+
+.button.warning {
+    color: #f0c564;
+    background: rgba(232,182,75,.07) !important;
+    border-color: rgba(232,182,75,.25);
+}
+
+input,
+select,
+textarea {
+    border-color: #2a3a32 !important;
+    background: #090d0b !important;
+    color: var(--text);
+    box-shadow: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: rgba(57,234,125,.68) !important;
+    box-shadow: 0 0 0 2px rgba(57,234,125,.08);
+}
+
+.status-badge,
+.badge,
+.miniguard-status-badge,
+.log-level,
+.module-type-badge,
+.source-badge {
+    border-radius: 0 !important;
+}
+
+.summary-icon,
+.device-icon,
+.guardian-icon.large,
+.miniguard-card__icon {
+    border-radius: 0 !important;
+    color: #8df8b4;
+    background: #112019 !important;
+    border: 1px solid rgba(57,232,125,.18);
+    box-shadow: none;
+}
+
+.live-dot,
+.key-dot,
+.incident-severity-dot,
+.timeline-dot,
+.compact-status-dot,
+.event-level,
+.chart-point {
+    border-radius: 50% !important;
+}
+
+.card-menu {
+    position: relative !important;
+    z-index: 200 !important;
+}
+
+.card-menu:has(.card-menu-panel:not([hidden])) {
+    z-index: 5000 !important;
+}
+
+.card-menu-panel {
+    position: absolute !important;
+    z-index: 6000 !important;
+    top: calc(100% + 7px);
+    right: 0;
+    width: 205px;
+    overflow: visible !important;
+    border: 1px solid #355042 !important;
+    border-radius: 0 !important;
+    background: #0b100d !important;
+    box-shadow: 0 18px 42px rgba(0,0,0,.58) !important;
+}
+
+.card-menu-panel a,
+.card-menu-panel button {
+    color: #d9e6de !important;
+    background: transparent !important;
+}
+
+.card-menu-panel a:hover,
+.card-menu-panel button:hover {
+    color: #dffff0 !important;
+    background: rgba(57,234,125,.095) !important;
+}
+
+.card-menu-panel .menu-danger {
+    color: #ff7f8b !important;
+}
+
+.card-menu-panel .menu-danger:hover {
+    background: rgba(255,96,109,.10) !important;
+}
+
+.guardian-card,
+.miniguard-row,
+.module-card,
+.dashboard-panel,
+.dashboard-status-card,
+.system-card,
+.system-health-tile,
+.incident-card {
+    overflow: visible !important;
+    position: relative;
+}
+
+.guardian-card:hover,
+.miniguard-row:hover,
+.module-card:hover,
+.dashboard-panel:hover,
+.dashboard-status-card:hover,
+.system-card:hover,
+.system-health-tile:hover,
+.incident-card:hover {
+    transform: none !important;
+}
+
+pre {
+    border: 1px solid #263a2e !important;
+    border-radius: 0 !important;
+    background: #060907 !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.018);
+}
+
+pre code,
+code {
+    color: #8cf5ad;
+    font-family:
+        "JetBrains Mono",
+        "Cascadia Code",
+        "IBM Plex Mono",
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        monospace;
+}
+
+.protocol-table th {
+    color: #91a59a;
+    background: #0b110e !important;
+}
+
+.protocol-table tbody tr:hover {
+    background: rgba(57,232,125,.022) !important;
+}
+
+.chart-line {
+    stroke: var(--accent) !important;
+}
+
+.average-line {
+    stroke: #7be5a0 !important;
+}
+
+.average-label {
+    fill: #9fe6b7 !important;
+}
+
+.range-tabs a {
+    border-radius: 0 !important;
+}
+
+.range-tabs a.active {
+    color: #bffbd3 !important;
+    background: rgba(57,232,125,.08) !important;
+    border-color: rgba(57,232,125,.34) !important;
+}
+
+.context-help__body,
+.context-help__toggle,
+.context-help__selection,
+.context-help__field {
+    border-radius: 0 !important;
+}
+
+.context-help__toggle:focus-visible {
+    outline-color: rgba(57,234,125,.55) !important;
+}
+
+:focus-visible {
+    outline: 2px solid rgba(57,232,125,.64);
+    outline-offset: 2px;
+}
+
+* {
+    scrollbar-color: #355040 #0a100d;
+    scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0a100d;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #31483a;
+    border: 2px solid #0a100d;
+    border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #42614e;
+}
+
+footer {
+    color: #667a6f;
+}
+
+@media (max-width: 850px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .main-content {
+        padding: 22px 16px;
+    }
+}
+
+/* === LANAXY TERMINAL DESIGN 1.0.3 END === */
