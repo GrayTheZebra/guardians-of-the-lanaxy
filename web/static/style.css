@@ -4784,3 +4784,33 @@ footer {
 }
 /* === LANAXY SYSTEM TABS + CONFIG HISTORY 1.0.4 END === */
 
+/* === LANAXY GUARDIAN DIRECT ADD MENU FIX START === */
+.guardian-type-menu.card-menu-panel {
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(620px, calc(100vh - 150px));
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+}
+
+.guardian-type-menu .guardian-type-menu-group,
+.guardian-type-menu .guardian-type-menu-heading,
+.guardian-type-menu a {
+    box-sizing: border-box;
+}
+
+.guardian-type-menu a {
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    border-radius: 0 !important;
+}
+
+@media (max-height: 700px) {
+    .guardian-type-menu.card-menu-panel {
+        max-height: calc(100vh - 110px);
+    }
+}
+/* === LANAXY GUARDIAN DIRECT ADD MENU FIX END === */
+
