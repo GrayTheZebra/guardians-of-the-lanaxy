@@ -34,6 +34,7 @@ jobs:
           bash -n scripts/deploy-public-installer.sh
           bash -n install.sh
           bash -n update.sh
+          bash -n uninstall.sh
           bash -n miniguard_install.sh
           bash -n scripts/setup-lanlord.sh
 
@@ -117,6 +118,7 @@ jobs:
           test -f examples/config.yaml
           test -f systemd/lanaxy.service
           test -f systemd/lanaxy-web.service
+          test -f uninstall.sh
           test -x bootstrap.sh
           test -x deploy/lanaxy.de/install.sh
           test -x scripts/deploy-public-installer.sh
