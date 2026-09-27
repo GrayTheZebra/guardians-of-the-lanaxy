@@ -4671,3 +4671,115 @@ footer {
 }
 
 /* === LANAXY TERMINAL DESIGN 1.0.3 END === */
+
+/* === LANAXY SYSTEM TABS + CONFIG HISTORY 1.0.4 START === */
+.system-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 0 0 18px;
+    border: 1px solid var(--ui-border, var(--line));
+    background: #0b100d;
+}
+.system-tabs button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 16px;
+    border: 0;
+    border-right: 1px solid var(--ui-border, var(--line));
+    border-radius: 0;
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+}
+.system-tabs button:last-child { border-right: 0; }
+.system-tabs button:hover {
+    color: var(--text);
+    background: rgba(57,234,125,.035);
+}
+.system-tabs button.active {
+    color: var(--accent-light);
+    background: rgba(57,234,125,.07);
+    box-shadow: inset 0 -2px 0 var(--accent);
+}
+.system-tab-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #617269;
+}
+.system-tab-dot.ok { background: var(--ok); }
+.system-tab-dot.warning { background: var(--warning); }
+.system-tab-dot.critical { background: var(--critical); }
+[data-system-tab-content][hidden],
+.system-card-grid[hidden] { display: none !important; }
+
+.config-history-system-card { margin-bottom: 18px; }
+.config-history-system-card .card-heading { margin-bottom: 0; }
+
+.config-history-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+.config-history-summary-grid .summary-card { min-height: 92px; }
+.config-history-toolbar {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.5fr) minmax(220px, .8fr) auto;
+    gap: 14px;
+    align-items: end;
+    margin-bottom: 18px;
+}
+.config-history-toolbar > label:not(.checkbox-row) {
+    display: grid;
+    gap: 6px;
+}
+.config-history-toolbar > label > span {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.config-history-critical-filter {
+    align-items: center;
+    min-height: 42px;
+    margin: 0;
+}
+.config-history-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.config-history-changes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 9px;
+}
+.config-history-changes .badge {
+    color: #a9d9b9;
+    background: rgba(57,234,125,.045);
+    border: 1px solid rgba(57,234,125,.14);
+}
+.config-history-heading .heading-actions form { margin: 0; }
+.config-history-row[hidden] { display: none !important; }
+
+@media (max-width: 1100px) {
+    .config-history-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .config-history-toolbar { grid-template-columns: 1fr 1fr; }
+    .config-history-critical-filter { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+    .system-tabs { display: grid; grid-template-columns: 1fr 1fr; }
+    .system-tabs button { border-bottom: 1px solid var(--ui-border, var(--line)); }
+    .config-history-summary-grid,
+    .config-history-toolbar { grid-template-columns: 1fr; }
+    .config-history-critical-filter { grid-column: auto; }
+}
+/* === LANAXY SYSTEM TABS + CONFIG HISTORY 1.0.4 END === */
+
