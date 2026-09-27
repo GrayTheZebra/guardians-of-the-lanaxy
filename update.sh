@@ -44,6 +44,7 @@ chmod +x \
     web/run.py \
     install.sh \
     update.sh \
+    uninstall.sh \
     scripts/setup-lanlord.sh \
     scripts/deploy-public-installer.sh
 
@@ -66,6 +67,7 @@ required_files=(
     "inventory_intelligence.py"
     "assistant_planner.py"
     "system_health.py"
+    "uninstall.sh"
 )
 missing_files=()
 for required_file in "${required_files[@]}"; do
