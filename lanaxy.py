@@ -33,7 +33,7 @@ from notifications import NotificationDispatcher
 APP_NAME = "Guardians of the LANaxy"
 APP_SLUG = "guardians-of-the-lanaxy"
 CLI_NAME = "lanaxy"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 
 RUNTIME_STATUS_PATH = Path("/run/lanaxy/runtime.json")
 
