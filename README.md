@@ -26,6 +26,7 @@ LANaxy prüft Dienste und Systeme über **Guardians**, bewertet Statusänderunge
 - [CLI](#cli)
 - [Dienste und Logs](#dienste-und-logs)
 - [Updates](#updates)
+- [Deinstallation](#deinstallation)
 - [Sicherheit](#sicherheit)
 - [Fehlerdiagnose](#fehlerdiagnose)
 - [Architektur](#architektur)
@@ -770,6 +771,39 @@ Benutzerkonfiguration und Laufzeitdaten liegen außerhalb des Projektverzeichnis
 
 ---
 
+## Deinstallation
+
+### Öffentlicher Deinstaller
+
+LANaxy kann über den offiziellen Deinstaller wieder entfernt werden:
+
+```bash
+curl -fsSL https://lanaxy.de/uninstall.sh | sudo bash
+```
+
+Der interaktive Deinstaller bietet zwei Varianten:
+
+1. **Vollständig entfernen:** Programm, systemd-Dienste, LANaxy-Konfiguration, Datenbank, Backups, Logs und der Systembenutzer `lanlord` werden entfernt.
+2. **Programm entfernen, Daten behalten:** Dienste und Programmdateien werden entfernt; `/etc/lanaxy`, `/var/lib/lanaxy`, `/var/log/lanaxy` und der Benutzer `lanlord` bleiben für eine spätere Neuinstallation erhalten.
+
+Für nicht-interaktive Aufrufe stehen explizite Optionen zur Verfügung:
+
+```bash
+curl -fsSL https://lanaxy.de/uninstall.sh | sudo bash -s -- --purge --yes
+curl -fsSL https://lanaxy.de/uninstall.sh | sudo bash -s -- --keep-data --yes
+```
+
+Die von LANaxy während der Installation über APT installierten allgemeinen Linux-Pakete werden absichtlich **nicht** automatisch entfernt. Sie können auch von Proxmox oder anderen Anwendungen verwendet werden.
+
+Bei einer lokalen Installation kann der Deinstaller direkt ausgeführt werden:
+
+```bash
+cd /opt/guardians-of-the-lanaxy
+sudo ./uninstall.sh
+```
+
+---
+
 ## Sicherheit
 
 LANaxy verwaltet Zugangsdaten, API-Tokens und Steuerendpunkte. Vor einem produktiven oder öffentlich erreichbaren Betrieb sollten mindestens folgende Punkte umgesetzt werden:
@@ -998,6 +1032,7 @@ guardians-of-the-lanaxy/
 ├── docs/                     # zusätzliche Dokumentation
 ├── install.sh                # Neuinstallation
 ├── update.sh                 # sicherer Updatepfad
+├── uninstall.sh              # sichere Deinstallation mit optionalem Datenerhalt
 ├── bootstrap.sh              # GitHub-Release-Installer
 └── release_validation.py     # Release- und Datenbankprüfung
 ```
