@@ -46,6 +46,11 @@ jobs:
         run: |
           python3 -B -m compileall -q .
 
+      - name: README-Version prüfen
+        run: |
+          VERSION="$(python3 -B -c 'from lanaxy import APP_VERSION; print(APP_VERSION)')"
+          grep -Fq "> Aktuelle Version: **${VERSION}**" README.md
+
       - name: WSGI-Konfiguration prüfen
         env:
           PYTHONDONTWRITEBYTECODE: "1"
