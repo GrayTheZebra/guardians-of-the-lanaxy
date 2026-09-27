@@ -27,7 +27,21 @@
             {% else %}
                 {% set value = current if current is not none else field.get('default', '') %}
             {% endif %}
-            {% if metadata.module == 'proxmox_api' and key == 'node' %}
+            {% if metadata.module == 'smart' and key == 'device' %}
+            <div class="smart-device-picker" data-smart-device-picker data-current-device="{{ value }}">
+                <input type="hidden" name="{{ key }}" value="{{ value }}" data-smart-device-value>
+                <select class="discovery-select" data-smart-device-select>
+                    <option value="">MiniGuard auswählen ...</option>
+                </select>
+                <input type="text" value="{{ value }}" placeholder="/dev/sda oder /dev/nvme0n1"
+                       autocomplete="off" data-smart-device-manual hidden>
+                <div class="form-actions smart-device-picker-actions">
+                    <button class="button" type="button" data-smart-device-refresh>Datenträger neu laden</button>
+                    <button class="button" type="button" data-smart-device-manual-toggle>Manuell eingeben</button>
+                </div>
+                <small class="field-hint" data-smart-device-status>Datenträger werden aus dem MiniGuard-Inventar geladen.</small>
+            </div>
+            {% elif metadata.module == 'proxmox_api' and key == 'node' %}
             <div class="proxmox-node-field">
                 <input type="text" name="{{ key }}" value="{{ value }}" autocomplete="off" placeholder="Automatisch erkennen">
                 <button class="button" id="proxmox-discover-nodes" type="button">Nodes erkennen</button>
@@ -630,4 +644,5 @@ updateConditionalFields();
 updateProxmoxGuidance();
 updatePbsGuidance();
 </script>
+<script src="{{ url_for('static', filename='smart_device_picker.js', v=app_version) }}"></script>
 {% endblock %}
