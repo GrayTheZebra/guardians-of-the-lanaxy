@@ -2,6 +2,7 @@ import copy
 import os
 import re
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -92,6 +93,145 @@ def configuration_inventory(config: dict) -> dict:
         "portal_names": portals,
     }
 
+
+
+def _history_size_human(size: int) -> str:
+    value = float(max(0, size))
+    units = ("B", "KB", "MB", "GB", "TB")
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{int(size)} B"
+
+
+def configuration_changed_sections(before: dict, after: dict) -> dict[str, Any]:
+    """Return a compact change classification for configuration history."""
+    before = before or {}
+    after = after or {}
+
+    def nested(source: dict, *keys):
+        value: Any = source
+        for key in keys:
+            if not isinstance(value, dict):
+                return None
+            value = value.get(key)
+        return value
+
+    sections: list[str] = []
+    comparisons = (
+        ("Guardians", before.get("checks"), after.get("checks")),
+        ("Beacons", nested(before, "notifications", "channels"), nested(after, "notifications", "channels")),
+        ("Rules", nested(before, "notifications", "rules"), nested(after, "notifications", "rules")),
+        ("Portals", nested(before, "control", "portals"), nested(after, "control", "portals")),
+        ("Netzwerk & MQTT", before.get("mqtt"), after.get("mqtt")),
+        ("Oberfläche", nested(before, "web", "language"), nested(after, "web", "language")),
+        ("Datum & Uhrzeit", nested(before, "web", "datetime"), nested(after, "web", "datetime")),
+        ("System & Aufbewahrung", before.get("lanaxy"), after.get("lanaxy")),
+        ("Wartung", before.get("maintenance_windows"), after.get("maintenance_windows")),
+    )
+    for label, old, new in comparisons:
+        if old != new:
+            sections.append(label)
+
+    security_changed = (
+        nested(before, "web", "authentication") != nested(after, "web", "authentication")
+        or {
+            key: value
+            for key, value in (before.get("control") or {}).items()
+            if key != "portals"
+        }
+        != {
+            key: value
+            for key, value in (after.get("control") or {}).items()
+            if key != "portals"
+        }
+    )
+    if security_changed:
+        sections.append("Zugriff & Sicherheit")
+
+    sections = list(dict.fromkeys(sections))
+    return {
+        "changed_sections": sections,
+        "critical_change": bool(security_changed),
+    }
+
+
+def configuration_history_stats(backup_dir: Path) -> dict[str, Any]:
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    revisions = sorted(
+        backup_dir.glob("config-*.yaml"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    total_size = 0
+    for path in revisions:
+        try:
+            total_size += path.stat().st_size
+        except OSError:
+            pass
+        sidecar = path.with_suffix(".json")
+        try:
+            total_size += sidecar.stat().st_size
+        except OSError:
+            pass
+    return {
+        "count": len(revisions),
+        "size": total_size,
+        "size_human": _history_size_human(total_size),
+        "oldest": (
+            datetime.fromtimestamp(revisions[0].stat().st_mtime).isoformat(timespec="seconds")
+            if revisions else None
+        ),
+        "newest": (
+            datetime.fromtimestamp(revisions[-1].stat().st_mtime).isoformat(timespec="seconds")
+            if revisions else None
+        ),
+    }
+
+
+def prune_configuration_history_by_age(backup_dir: Path, days: int = -1) -> dict[str, int]:
+    """Remove configuration revisions older than *days*.
+
+    A value of 0 or -1 means unlimited retention. Other negative values are
+    normalized to unlimited as a safety measure.
+    """
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        days = -1
+
+    removed_yaml = 0
+    removed_meta = 0
+    cutoff = None if days <= 0 else time.time() - (days * 86400)
+
+    revisions = list(backup_dir.glob("config-*.yaml"))
+    for path in revisions:
+        try:
+            expired = cutoff is not None and path.stat().st_mtime < cutoff
+        except OSError:
+            expired = False
+        if not expired:
+            continue
+        path.unlink(missing_ok=True)
+        removed_yaml += 1
+        sidecar = path.with_suffix(".json")
+        if sidecar.exists():
+            sidecar.unlink(missing_ok=True)
+            removed_meta += 1
+
+    valid_stems = {path.stem for path in backup_dir.glob("config-*.yaml")}
+    for sidecar in backup_dir.glob("config-*.json"):
+        if sidecar.stem not in valid_stems:
+            sidecar.unlink(missing_ok=True)
+            removed_meta += 1
+
+    for temporary in backup_dir.glob("*.tmp"):
+        temporary.unlink(missing_ok=True)
+
+    return {"history": removed_yaml, "metadata": removed_meta}
 
 
 def prune_configuration_history(backup_dir: Path, keep: int = 100) -> dict[str, int]:
@@ -306,7 +446,12 @@ class ConfigService:
         self.backup_dir = Path(backup_dir)
 
     def load(self) -> dict:
-        return load_config(str(self.config_path))
+        config = load_config(str(self.config_path))
+        retention_days = int(
+            config.get("lanaxy", {}).get("config_history_retention_days", -1)
+        )
+        prune_configuration_history_by_age(self.backup_dir, retention_days)
+        return config
 
     def validate(self, config: dict):
         checks = config.get("checks", [])
@@ -385,6 +530,7 @@ class ConfigService:
                 metadata = {
                     "created_at": datetime.now().isoformat(timespec="seconds"),
                     **configuration_inventory(old_config),
+                    **configuration_changed_sections(old_config, config),
                 }
                 backup_path.with_suffix(".json").write_text(__import__("json").dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
             except Exception:
@@ -405,10 +551,13 @@ class ConfigService:
         os.chmod(temp_path, 0o600)
         os.replace(temp_path, self.config_path)
 
-        history_keep = int(
-            config.get("lanaxy", {}).get("config_history_keep", 100) or 100
+        history_retention_days = int(
+            config.get("lanaxy", {}).get("config_history_retention_days", -1)
         )
-        prune_configuration_history(self.backup_dir, history_keep)
+        prune_configuration_history_by_age(
+            self.backup_dir,
+            history_retention_days,
+        )
 
     def upsert_check(self, check: dict, original_id: str | None = None):
         config = self.load()
