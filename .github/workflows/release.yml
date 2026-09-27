@@ -92,6 +92,10 @@ jobs:
             web.run:app
 
           VERSION="$(python3 -B -c 'from lanaxy import APP_VERSION; print(APP_VERSION)')"
+          if ! grep -Fq "> Aktuelle Version: **${VERSION}**" README.md; then
+            echo "Fehler: README-Version stimmt nicht mit APP_VERSION überein." >&2
+            exit 1
+          fi
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
             test "v${VERSION}" = "$GITHUB_REF_NAME"
           fi
