@@ -84,6 +84,21 @@
                 <textarea name="{{ key }}" rows="5"
                           {% if field.required %}required{% endif %}>{{ current }}</textarea>
             {% else %}
+                {% if extra_kind == 'guardian' and component_type|default('') == 'smart' and key == 'device' %}
+                <div class="smart-device-picker" data-smart-device-picker data-current-device="{{ current }}">
+                    <input type="hidden" name="{{ key }}" value="{{ current }}" data-smart-device-value>
+                    <select class="discovery-select" data-smart-device-select>
+                        <option value="">MiniGuard auswählen ...</option>
+                    </select>
+                    <input type="text" value="{{ current }}" placeholder="/dev/sda oder /dev/nvme0n1"
+                           autocomplete="off" data-smart-device-manual hidden>
+                    <div class="form-actions smart-device-picker-actions">
+                        <button class="button" type="button" data-smart-device-refresh>Datenträger neu laden</button>
+                        <button class="button" type="button" data-smart-device-manual-toggle>Manuell eingeben</button>
+                    </div>
+                    <small class="field-hint" data-smart-device-status>Datenträger werden aus dem MiniGuard-Inventar geladen.</small>
+                </div>
+                {% else %}
                 <input
                     type="{{ 'text' if field.type in ['slug', 'url'] else ('password' if field.secret else field.type) }}"
                     name="{{ key }}"
@@ -92,6 +107,7 @@
                     {% if field.get('min') is not none %}min="{{ field.min }}"{% endif %}
                     autocomplete="{{ 'new-password' if field.secret else 'off' }}"
                 >
+                {% endif %}
             {% endif %}
             {% if field.help %}<small class="field-hint">{{ field.help }}</small>{% endif %}
             {% if field.get('hint') %}<small class="field-hint">{{ field.hint }}</small>{% endif %}
@@ -161,4 +177,5 @@ document.querySelectorAll("select, input[type=\"checkbox\"]").forEach((select) =
 });
 updateLaunchpadConditionalFields();
 </script>
+<script src="{{ url_for('static', filename='smart_device_picker.js', v=app_version) }}"></script>
 {% endblock %}
