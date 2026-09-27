@@ -75,6 +75,7 @@ jobs:
           bash -n scripts/deploy-public-installer.sh
           bash -n install.sh
           bash -n update.sh
+          bash -n uninstall.sh
 
           cmp -s bootstrap.sh deploy/lanaxy.de/install.sh
 
@@ -131,10 +132,13 @@ jobs:
             > guardians-of-the-lanaxy.zip.sha256
 
           cp ../bootstrap.sh install.sh
-          chmod 0755 install.sh
+          cp ../uninstall.sh uninstall.sh
+          chmod 0755 install.sh uninstall.sh
 
           sha256sum install.sh \
             > install.sh.sha256
+          sha256sum uninstall.sh \
+            > uninstall.sh.sha256
 
           if unzip -l guardians-of-the-lanaxy.zip \
             | grep -E "(__pycache__|\.py[co]$)"; then
@@ -156,6 +160,8 @@ jobs:
             dist/guardians-of-the-lanaxy.zip.sha256
             dist/install.sh
             dist/install.sh.sha256
+            dist/uninstall.sh
+            dist/uninstall.sh.sha256
           )
 
           if gh release view "$TAG" >/dev/null 2>&1; then
