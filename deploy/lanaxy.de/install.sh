@@ -108,7 +108,7 @@ unzip -q "$ARCHIVE" -d "$UNPACKED"
 readonly SOURCE_DIR="$UNPACKED/guardians-of-the-lanaxy"
 
 required_files=(
-    lanaxy.py install.sh update.sh bootstrap.sh
+    lanaxy.py install.sh update.sh uninstall.sh bootstrap.sh
     examples/config.yaml systemd/lanaxy.service systemd/lanaxy-web.service
     LICENSE THIRD_PARTY_LICENSES.md
 )
@@ -150,6 +150,7 @@ chmod +x \
     bootstrap.sh \
     install.sh \
     update.sh \
+    uninstall.sh \
     lanaxy.py \
     bin/lanaxy \
     web/run.py \
