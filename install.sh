@@ -46,6 +46,7 @@ chmod +x \
     web/run.py \
     install.sh \
     update.sh \
+    uninstall.sh \
     scripts/setup-lanlord.sh \
     scripts/lanaxy-system-helper \
     scripts/deploy-public-installer.sh
