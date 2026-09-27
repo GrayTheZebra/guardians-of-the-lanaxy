@@ -8,6 +8,16 @@
     </div>
 </section>
 
+<nav class="system-tabs" aria-label="Systembereiche">
+    <button type="button" data-system-tab="general"><span class="system-tab-dot {{ 'ok' if system_readiness.readiness == 'ready' else 'warning' }}"></span>Allgemein</button>
+    <button type="button" data-system-tab="security"><span class="system-tab-dot ok"></span>Zugriff & Sicherheit</button>
+    <button type="button" data-system-tab="data"><span class="system-tab-dot ok"></span>Daten & Aufbewahrung</button>
+    <button type="button" data-system-tab="backups"><span class="system-tab-dot {{ 'ok' if backup_count else 'warning' }}"></span>Backups</button>
+    <button type="button" data-system-tab="network"><span class="system-tab-dot {{ 'warning' if system_mqtt.get('enabled', false) and not mqtt_connected else 'ok' }}"></span>Netzwerk</button>
+    <button type="button" data-system-tab="diagnostics"><span class="system-tab-dot {{ 'ok' if system_readiness.readiness == 'ready' else 'warning' }}"></span>Diagnose</button>
+    <button type="button" data-system-tab="advanced">Erweitert</button>
+</nav>
+
 <section class="system-health-overview">
     <a class="system-health-tile {{ 'ok' if service_status.lanaxy == 'active' else 'critical' }}"
        href="#general">
@@ -66,15 +76,6 @@
     <a class="button" href="{{ url_for('readiness') }}" target="_blank">Readiness JSON</a>
   </div>
 </section>
-
-<nav class="system-section-nav">
-    <a href="#general">{{ 'General' if language == 'en' else 'Allgemein' }}</a>
-    <a href="#maintenance">{{ 'Data maintenance' if language == 'en' else 'Datenpflege' }}</a>
-    <a href="#backups">Backups</a>
-    <a href="#diagnostics">{{ 'Diagnostics' if language == 'en' else 'Diagnose' }}</a>
-    <a href="{{ url_for('topology_page') }}">Abhängigkeiten</a>
-    <a href="{{ url_for('maintenance_planner_page') }}">Wartungsplaner</a>
-</nav>
 
 <section class="chart-card" style="margin-bottom:18px">
   <div class="card-heading"><div><h2>Topologie und Wartung</h2><p>Folgealarme über Abhängigkeiten unterdrücken und geplante Wartungsfenster verwalten.</p></div><div class="form-actions"><a class="button" href="{{ url_for('topology_page') }}">Abhängigkeiten</a><a class="button primary" href="{{ url_for('maintenance_planner_page') }}">Wartung planen</a></div></div>
@@ -221,6 +222,16 @@
         </div>
     </div>
 
+    <article class="chart-card config-history-system-card">
+        <div class="card-heading">
+            <div>
+                <h3>Konfigurationshistorie</h3>
+                <p>{{ config_history_stats.count }} Stände · {{ config_history_stats.size_human }} · Aufbewahrung: {{ 'unbegrenzt' if config_history_retention_days <= 0 else config_history_retention_days ~ ' Tage' }}</p>
+            </div>
+            <a class="button" href="{{ url_for('config_history_page') }}">Historie öffnen</a>
+        </div>
+    </article>
+
     <div class="maintenance-stat-grid">
         <article class="summary-card">
             <div>
@@ -262,11 +273,12 @@
                     <input type="number" min="1" max="500" name="backup_keep_count" value="{{ backup_keep_count }}">
                 </label>
                 <label>
-                    <span>{{ 'Maximum configuration revisions' if language == 'en' else 'Maximale Konfigurationsstände' }}</span>
-                    <input type="number" min="5" max="2000" name="config_history_keep" value="{{ config_history_keep }}">
+                    <span>Konfigurationshistorie aufbewahren (Tage)</span>
+                    <input type="number" min="-1" max="3650" name="config_history_retention_days" value="{{ config_history_retention_days }}">
+                    <small class="field-hint">0 oder -1 = unbegrenzt aufheben.</small>
                 </label>
-                <p class="security-note">Ältere Einträge werden automatisch entfernt. Temporäre Dateien und verwaiste Metadaten werden ebenfalls bereinigt.</p>
-                <button class="button primary" type="submit">{{ t('common.save') }}</button>
+                <p class="security-note">Die Regel wird automatisch angewendet. Temporäre Dateien und verwaiste Metadaten werden ebenfalls bereinigt.</p>
+                <button class="button primary" type="submit">Speichern und jetzt anwenden</button>
             </form>
 
             <hr class="card-divider">
@@ -647,6 +659,106 @@ async function copyControlToken() {
         combined.addEventListener("input", refreshPreview);
         refreshPreview();
     }
+})();
+</script>
+
+<script>
+(() => {
+    const tabs = [...document.querySelectorAll('[data-system-tab]')];
+    if (!tabs.length) return;
+
+    const generalGrid = document.getElementById('general');
+    const content = [];
+    const mark = (element, tab) => {
+        if (!element) return;
+        element.dataset.systemTabContent = tab;
+        content.push(element);
+    };
+
+    mark(document.querySelector('.system-health-overview'), 'general');
+    mark(document.querySelector('.system-readiness-card'), 'general');
+
+    if (generalGrid) {
+        [...generalGrid.children].forEach((element) => {
+            const section = element.dataset.systemSection || '';
+            let tab = 'general';
+            if (section === 'access') tab = 'security';
+            if (section === 'developer') tab = 'advanced';
+            if (section === 'mdns') tab = 'network';
+            element.dataset.systemTabContent = tab;
+        });
+    }
+
+    [...document.querySelectorAll('.chart-card')].forEach((card) => {
+        const title = card.querySelector('h2')?.textContent?.trim();
+        if (title === 'Topologie und Wartung') mark(card, 'advanced');
+    });
+
+    mark(document.getElementById('system-mqtt'), 'network');
+    mark(document.getElementById('maintenance'), 'data');
+    mark(document.getElementById('backups'), 'backups');
+    mark(document.getElementById('control'), 'security');
+    mark(document.getElementById('service-account'), 'security');
+    mark(document.getElementById('diagnostics'), 'diagnostics');
+
+    const hashToTab = {
+        general: 'general',
+        access: 'security',
+        security: 'security',
+        maintenance: 'data',
+        data: 'data',
+        backups: 'backups',
+        'system-mqtt': 'network',
+        network: 'network',
+        control: 'security',
+        'service-account': 'security',
+        diagnostics: 'diagnostics',
+        advanced: 'advanced'
+    };
+
+    function activate(tab, updateHash = false) {
+        if (!tabs.some((button) => button.dataset.systemTab === tab)) tab = 'general';
+
+        tabs.forEach((button) => {
+            const active = button.dataset.systemTab === tab;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-selected', String(active));
+        });
+
+        document.querySelectorAll('[data-system-tab-content]').forEach((element) => {
+            element.hidden = element.dataset.systemTabContent !== tab;
+        });
+
+        if (generalGrid) {
+            const children = [...generalGrid.children];
+            children.forEach((element) => {
+                element.hidden = element.dataset.systemTabContent !== tab;
+            });
+            generalGrid.hidden = !children.some((element) => !element.hidden);
+        }
+
+        localStorage.setItem('lanaxy-system-tab', tab);
+        if (updateHash) history.replaceState(null, '', `#${tab}`);
+    }
+
+    tabs.forEach((button) => button.addEventListener('click', () => {
+        activate(button.dataset.systemTab, true);
+    }));
+
+    function tabForHash() {
+        const hash = location.hash.replace(/^#/, '');
+        return hashToTab[hash] || null;
+    }
+
+    window.addEventListener('hashchange', () => {
+        const tab = tabForHash();
+        if (tab) activate(tab, false);
+    });
+
+    const initial = tabForHash()
+        || localStorage.getItem('lanaxy-system-tab')
+        || 'general';
+    activate(initial, false);
 })();
 </script>
 {% endblock %}
